@@ -840,10 +840,10 @@ switchLayer2Off:                ; does switch OFF both write-over-ROM and visibi
 
 ;-------------------------------
 prepareForErrorOutput           ; do "CLS" of ULA screen with white paper ("error" case)
-        call    cleanupBeforeBasic
-        nextreg MMU2_NR52,5*2   ; "error" CLS, page-in the bank5 explicitly
+        nextreg MMU2_NR52,5*2   ; page-in the bank5 explicitly
         nextreg MMU3_NR53,5*2+1
-        ld      a,7
+        call    cleanupBeforeBasic
+        ld      a,7             ; "error" CLS
         jr      clsWithBordercol.withA
 
 ;-------------------------------
