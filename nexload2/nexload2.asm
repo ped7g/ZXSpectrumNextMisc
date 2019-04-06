@@ -167,6 +167,7 @@ LORES_ENABLE                = %10000000
 
     STRUCT SCREEN_BLOCK_DEF
 TRIGGER_BIT     DB          ; bit in NEXLOAD_HEADER.LOADSCR to trigger this block
+DRAW_PIX_STRIP  DW          ; draw pixel strip routine for loading-bar support
 INIT_CODE       DW          ; address of code which will make the loaded data show
 TARGET_PAGE     DB          ; first MMU page
 PAGES_COUNT     DB          ; amount of pages to load
@@ -423,11 +424,11 @@ checkHeader:                ; CF=0 (no error), BC = bytes actually read from dis
 ;-------------------------------
 screenBlocksDefs:           ; order of block definitions must be same as block order in file
                             ; trigger_bit, init, page, count, pg_length
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LAYER2, LoadScr_showLayer2, LAYER2_BANK*2, 6, $20}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,   LoadScr_showUla, 5*2, 1, $1B}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LORES, LoadScr_showLoRes, 5*2, 2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES, LoadScr_showHiRes, 5*2, 2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL, LoadScr_showHiCol, 5*2, 2, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LAYER2, drawPixelStrip_L2,    LoadScr_showLayer2, LAYER2_BANK*2, 6, $20}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,    drawPixelStrip_None,  LoadScr_showUla,    5*2,           1, $1B}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LORES,  drawPixelStrip_LoRes, LoadScr_showLoRes,  5*2,           2, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES,  drawPixelStrip_None,  LoadScr_showHiRes,  5*2,           2, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL,  drawPixelStrip_None,  LoadScr_showHiCol,  5*2,           2, $18}
         DB                  0       ; terminator
 
 LoadScreenBlock:
@@ -435,6 +436,11 @@ LoadScreenBlock:
         ld      a,(nexHeader.BORDERCOL)
         out     ($FE),a     ; change border colour
         inc     hl
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)
+        inc     hl
+        ld      (drawProgressBar.ds),bc ; setup progress bar draw pixel routine per gfx mode
         ld      c,(hl)
         inc     hl
         ld      b,(hl)
@@ -744,33 +750,49 @@ loadBankA:
         jr      bankLoadDelay
 
 ;-------------------------------
-drawProgressBar:    ; using Bresenham's line algorithm math to progress per banks-num
-        ret         ; will become NOP if loaderbar is enabled, or RET when full-drawn/disabled
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; LoRes draws 1px per +1 in E, but alternates lines 94/95, 224 range = 112x2px bar
+drawPixelStrip_LoRes:
+        nextreg MMU7_NR57, 5*2+1    ; map the very bottom of LoRes to E000..FFFF
+        ld      d,$F7               ; last two lines of LoRes
+        rrc     e                   ; trade last bit of x-axis for y-axis
+        ld      a,(nexHeader.LOADBARCOL)
+        ld      (de),a
+        rlc     e                   ; restore E back to 16..240 range
+        ret
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; Layer2 draws 1x2 strip per +1 in E, 224 range = 224x2px bar
+drawPixelStrip_L2:
         nextreg MMU7_NR57, LAYER2_BANK*2+5  ; map the very bottom of Layer2 to E000..FFFF
-.x=$+1  ld      de,$FE10    ; starting coordinates are [16,190] = $FE10 address
-.D=$+1  ld      hl,-225     ; current "D"
-.b2=$+1 ld      bc,0        ; 2*banksNum (adding to "D")
-.drawStrips:
-        ; plot 1px strip
+        ld      d,$FE                       ; last two lines of Layer2
         ld      a,(nexHeader.LOADBARCOL)
         ld      (de),a
         inc     d
         ld      (de),a
-        dec     d
-        inc     e
-        ; test if final pixel was reached
-        ld      a,224+16-1
-        cp      e
-        jr      c,.progressBarIsFull
+drawPixelStrip_None:
+        ret
+
+;-------------------------------
+drawProgressBar:    ; using Bresenham's line algorithm math to progress per banks-num
+        ret         ; will become NOP if loaderbar is enabled, or RET when full-drawn/disabled
+.x=$+1  ld      de,$10      ; X-coordinate is designed to go in range 16..224+16-1
+.D=$+1  ld      hl,-225     ; current "D"
+.b2=$+1 ld      bc,0        ; 2*banksNum (adding to "D")
+.drawStrips:
+        ; check if progress bar is already full
+        ld      a,e
+        cp      224+16
+        ret     nc          ; no more drawing
+        ; draw "1px" strip and advance E (whatever that means in current GFX mode)
+.ds=$+1 call    drawPixelStrip_None
+        inc     e           ; advance x coordinate
         add     hl,bc
         jr      nc,.drawStrips
         ld      (.x),de     ; store current "x"
         add     hl,-448     ; adjust "D" for next progress step
         ld      (.D),hl
-        ret
-.progressBarIsFull:
-        ld      a,201                   ; disable progress bar routine since now
-        ld      (drawProgressBar),a     ; nop -> ret
         ret
 
 ;-------------------------------
