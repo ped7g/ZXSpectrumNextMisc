@@ -28,7 +28,6 @@
 ; - checking machine memory and use the RAMREQ to report low memory
 ; - passing cmd line args to the loaded code (ideally in C-compatible way)
 ; - having entry bank dynamically allocated by NextZXOS (entrybank = 255?)
-; - progress bar graphics also for other gfx modes
 ; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ; # V1.3+
 ; - checksums incorporated into the NEX file (maybe into header?) - mostly for file archival/transfers, not loader itself
@@ -425,10 +424,10 @@ checkHeader:                ; CF=0 (no error), BC = bytes actually read from dis
 screenBlocksDefs:           ; order of block definitions must be same as block order in file
                             ; trigger_bit, init, page, count, pg_length
         SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LAYER2, drawPixelStrip_L2,    LoadScr_showLayer2, LAYER2_BANK*2, 6, $20}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,    drawPixelStrip_None,  LoadScr_showUla,    5*2,           1, $1B}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,    drawPixelStrip_Ula,   LoadScr_showUla,    5*2,           1, $1B}
         SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LORES,  drawPixelStrip_LoRes, LoadScr_showLoRes,  5*2,           2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES,  drawPixelStrip_None,  LoadScr_showHiRes,  5*2,           2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL,  drawPixelStrip_None,  LoadScr_showHiCol,  5*2,           2, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES,  drawPixelStrip_Ula,   LoadScr_showHiRes,  5*2,           2, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL,  drawPixelStrip_Ula,   LoadScr_showHiCol,  5*2,           2, $18}
         DB                  0       ; terminator
 
 LoadScreenBlock:
@@ -748,6 +747,26 @@ loadBankA:
         ld      bc,$4000
         call    fread
         jr      bankLoadDelay
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; ULA draws 1x2px strip per +1 in E, 224 range = 224x2px bar
+drawPixelStrip_Ula:
+        nextreg MMU7_NR57, 5*2      ; map the ULA screen to E000..FFFF (!)
+        push    hl
+        ld      d,$BE               ; last two lines of ULA
+        pixelad                     ; HL = classic ULA address (at $4000)
+        add     hl,$A000            ; transform VRAM address into E000 range
+        call    .xorPixel
+        pixeldn                     ; move one pixel down
+        call    .xorPixel
+        pop     hl
+        ret
+.xorPixel:
+        setae                       ; A = bit-pixel from E coordinate
+        xor     (hl)                ; xor the pixel
+        ld      (hl),a
+        ret
 
 ;-------------------------------
 ; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
