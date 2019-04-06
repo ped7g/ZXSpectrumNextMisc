@@ -988,10 +988,10 @@ testStart
         ; setup fake argument and launch loader
         ld      hl,testFakeName0
         jp      $2000
-; screen-loader test
-testFakeName0   DZ  "tmNoPic.nex"
-    ;coreVersion.nex  loaderVersion.nex     tmHiCol.nex  tmLoRes.nex       tmNoPic.nex    tmUla.nex
-    ;empty.nex        preserveNextRegs.nex  tmHiRes.nex  tmLoResNoPal.nex  tmNoStart.nex
+; screen-loader and basic functions test
+testFakeName0   DZ  "\"s p a c e.nex\""
+;  coreVersion.nex   loaderVersion.nex    \"s p a c e.nex\"  tmHiRes.nex   tmLoResNoPal.nex   tmNoStart.nex
+;  empty.nex         preserveNextRegs.nex   tmHiCol.nex      tmLoRes.nex   tmNoPic.nex        tmUla.nex
 ; name parsing test
 testFakeName1   DB  "   \"Warhawk.nex\" "
 testFakeName2   DB  "  NXtel.nex:"          ; leading space, colon

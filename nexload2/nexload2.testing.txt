@@ -13,6 +13,9 @@ There are two files "empty.nex" and "preserveNextRegs.nex" which should just ret
 the "empty" one will reset all Next registers and do "CLS" with magenta border+paper, the
 "preserve" should keep 90% of machine state intact (both have "start delay" defined to ~2s).
 
+File "s p a c e.nex" added (copy of empty.nex with yellow border colour), to test spaces
+in file name.
+
 Trying to load non-existent file (should produce "ESXDOS" error (M_GETERR service))
 
 Loading the tm*** files from this repository to test non-Layer2 screen loading
