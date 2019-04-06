@@ -1026,6 +1026,7 @@ testStart
         ld      de,$2000
         ld      bc,last-start
         ldir
+;         INCLUDE "nexload2.test.progress.i.asm"  ; this was used to develop progress bars
         ; setup fake argument and launch loader
         ld      hl,testFakeName0
         jp      $2000
