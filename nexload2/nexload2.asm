@@ -22,10 +22,14 @@
 ; which is included in official distribution under MIT license (AFAIK).
 ;
 ; Roadmap (things which may eventually happen, if enough effort + acceptance...):
+; # documentation
+; - add docs for "preserve NextRegs", i.e. what environment can the code expect after load
 ; # probably compatible with current V1.2 file format
 ; - checking machine memory and use the RAMREQ to report low memory
 ; - passing cmd line args to the loaded code (ideally in C-compatible way)
 ; - having entry bank dynamically allocated by NextZXOS (entrybank = 255?)
+; - progress bar graphics also for other gfx modes
+; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ; # V1.3+
 ; - checksums incorporated into the NEX file (maybe into header?) - mostly for file archival/transfers, not loader itself
 ; - custom palettes also for ULA/HiRes/HiCol screens (maybe +64 flag?)
@@ -361,10 +365,10 @@ customErrorToBasic: ; HL = message with |80 last char
 
 ;-------------------------------
 checkHeader:                ; CF=0 (no error), BC = bytes actually read from disk
-        ;;TODO: RAM required check
         ld      hl,NEXLOAD_HEADER   ; check if whole header was read
         sbc     hl,bc
         jr      nz,.FileIsNotNex
+        ;;TODO: RAM required check
         ; verify first four bytes are "Next"
         ld      hl,(nexHeader)
         ld      bc,'eN'
@@ -985,7 +989,9 @@ testStart
         ld      hl,testFakeName0
         jp      $2000
 ; screen-loader test
-testFakeName0   DZ  "tmNoPic.nex"    ;tmNoPic.nex  tmHiCol.nex  tmHiRes.nex  tmLoRes.nex  tmLoResNoPal.nex  tmNoStart.nex  tmUla.nex
+testFakeName0   DZ  "tmNoPic.nex"
+    ;coreVersion.nex  loaderVersion.nex     tmHiCol.nex  tmLoRes.nex       tmNoPic.nex    tmUla.nex
+    ;empty.nex        preserveNextRegs.nex  tmHiRes.nex  tmLoResNoPal.nex  tmNoStart.nex
 ; name parsing test
 testFakeName1   DB  "   \"Warhawk.nex\" "
 testFakeName2   DB  "  NXtel.nex:"          ; leading space, colon

@@ -1,0 +1,37 @@
+Some common ways how to test:
+
+# real board testing:
+
+No argument, space only, empty quotes => should display usage hint
+
+Loading non-NEX file should end with "Not a NEX file (short/bad data)" (NEX file must
+have at least 512 bytes (full header), which starts with four bytes "Next")
+
+There are two files "loaderVersion.nex" and "coreVersion.nex" to test the versions checks.
+
+There are two files "empty.nex" and "preserveNextRegs.nex" which should just return to OS,
+the "empty" one will reset all Next registers and do "CLS" with magenta border+paper, the
+"preserve" should keep 90% of machine state intact (both have "start delay" defined to ~2s).
+
+Trying to load non-existent file (should produce "ESXDOS" error (M_GETERR service))
+
+Loading the tm*** files from this repository to test non-Layer2 screen loading
+
+Testing with regular NEX files whether it actually works :)
+
+Testing the empty files with different 128k memory bank (both should restore 128k bank
+according to SYSVAR)
+
+# CSpect: main code and common code paths
+
+- uncomment TESTING define, put CSPECT_BREAK into code of interest, put desired "filename"
+to one of testFakeName defines at the very end of source code, and make the TESTING loader
+use it, compile to get SNA file, load that into cspect (with -brk option)
+
+# ZEsarUX: proper dot command emulation
+
+- one can build new MMC image with the NEXLOAD2 binary to have the dot command available
+(no instructions, because I still don't know any simple way to do this under linux w/o
+learning how to use another new tool(s))
+
+- the TESTING variants should work also in ZEsarUX, but avoid CSPECT_BREAK instruction
