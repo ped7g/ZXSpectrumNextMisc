@@ -2,8 +2,8 @@
 ; .nexload2
 ; © Peter Helcmanovsky 2019, license: https://opensource.org/licenses/MIT
 ;
-; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.11.2+)
-; Use options: --zxnext
+; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.12.0+)
+; Use options: --zxnext (--zxnext=cspect for TESTING snapshot)
 ;
 ; The NEX file format: http://devnext.referata.com/wiki/NEX_file_format
 ;
@@ -37,6 +37,8 @@
 ; - With a flag (bit 7 of number of handles?) to force close all existing open handles first.
 ;
 ; Changelist:
+; v2  14/04/2019 P7G    fixing bug in palette loader
+;
 ; v1  04/04/2019 P7G    Rewriting the NEXLOAD from scratch
 ;
 ;-------------------------------
@@ -177,7 +179,7 @@ PAGE_LENGTH     DB          ; high8b of amount of data to load into single page 
 
     MACRO ESXDOS service? : push hl : pop ix : rst $08 : db service? : ENDM     ; copies HL into IX
     MACRO NEXTREG2A nextreg? : ld a,nextreg? : call readNextReg2A : ENDM
-    MACRO CSPECT_BREAK : IFDEF TESTING : db $DD, $01 : ENDIF : ENDM
+    MACRO CSPECT_BREAK : IFDEF TESTING : break : ENDIF : ENDM
 
 ;;-------------------------------
 ;; Start of the machine code itself
@@ -509,23 +511,21 @@ LoadFilePalette:
         ld      hl,filePalette
         ld      bc,$200
         call    fread
-        ld      a,(nexHeader.LOADSCR)
         nextreg PALETTE_CONTROL_NR43,$10    ; NR43=Layer2 first palette
+        ld      a,(nexHeader.LOADSCR)
         test    NEXLOAD_LOADSCR_LAYER2
-        call    nz,.setPalette
+        jr      nz,.setPalette              ; In case Layer2 screen is loaded (or L2+LoRes)
         nextreg PALETTE_CONTROL_NR43,0      ; NR43=ULA first palette
-        test    NEXLOAD_LOADSCR_LORES
-        ret     z
+        ; LoRes palette is set only if Layer2 screen is not in the file (L2+LoRes=fail)
 .setPalette:
-        push    af
         nextreg PALETTE_INDEX_NR40,0        ; reset colour index to 0
-        ld      a,PALETTE_VALUE_BIT9_NR44
-        call    readNextReg2A               ; just set up the I/O port and BC (ignore value read)
-        xor     a
-.loop:  .2 outinb
-        dec     a
+        ld      hl,filePalette              ; and BC=$0200 from fread
+.loop:  ld      a,(hl)
+        inc     hl
+        nextreg PALETTE_VALUE_BIT9_NR44,a
+        dec     c
         jr      nz,.loop
-        pop     af
+        djnz    .loop
         ret
 
 ;-------------------------------
@@ -635,7 +635,7 @@ SetNextRegistersByData:
         ld      d,(hl)
         out     (c),d
         inc     hl          ; advance to next data
-.RegOp: db      0           ; modify register number in A (actual operation depends...)
+.RegOp: nop         ; modify register number in A (actual operation depends...)
         dec     e           ; until all are set
         jr      nz,.setDataLoop
         jr      .newBatchLoop  ; read remaining setup data
@@ -1029,6 +1029,7 @@ testStart
 ;         INCLUDE "nexload2.test.progress.i.asm"  ; this was used to develop progress bars
         ; setup fake argument and launch loader
         ld      hl,testFakeName0
+        CSPECT_BREAK
         jp      $2000
 ; screen-loader and basic functions test
 testFakeName0   DZ  "\"s p a c e.nex\""
