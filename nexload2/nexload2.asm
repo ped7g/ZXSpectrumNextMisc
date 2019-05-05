@@ -37,9 +37,9 @@
 ; - With a flag (bit 7 of number of handles?) to force close all existing open handles first.
 ;
 ; Changelist:
-; v2  14/04/2019 P7G    fixing bug in palette loader
-;
-; v1  04/04/2019 P7G    Rewriting the NEXLOAD from scratch
+; v2.1  05/05/2019 P7G    fixing bug in Entry-bank setup
+; v2    14/04/2019 P7G    fixing bug in palette loader
+; v1    04/04/2019 P7G    Rewriting the NEXLOAD from scratch
 ;
 ;-------------------------------
     device zxspectrum48
@@ -282,6 +282,10 @@ start:
         cp      NEXLOAD_MAX_BANK
         jr      c,.loadAllBanks
 
+        ; final progress bar + delay
+        call    drawProgressBar ; final bar here (must be before EntryBank setup!)
+        call    startDelay
+
         ;; all banks loaded, do the final setup before starting it
         ; map entry bank (for NEX files before V1.2 there should be zero in header = OK)
         ld      a,(nexHeader.ENTRYBANK)
@@ -302,11 +306,6 @@ start:
         ld      a,(handle)
         ld      (hl),a
 .handleResolved:
-
-        ; final progress bar + delay
-        call    drawProgressBar ; final bar here
-        call    startDelay
-
         ; set stack pointer, program counter, and BC to zero|file handle
 .handleInBcSMC=$+1 ld bc,0
         ld      hl,(nexHeader.PC)
