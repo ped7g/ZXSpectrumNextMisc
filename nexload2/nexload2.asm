@@ -37,6 +37,7 @@
 ; - With a flag (bit 7 of number of handles?) to force close all existing open handles first.
 ;
 ; Changelist:
+; v2.2  06/05/2019 P7G    set up C to 255 in case there's no file handle (for C projects)
 ; v2.1  05/05/2019 P7G    fixing bug in Entry-bank setup
 ; v2    14/04/2019 P7G    fixing bug in palette loader
 ; v1    04/04/2019 P7G    Rewriting the NEXLOAD from scratch
@@ -306,8 +307,8 @@ start:
         ld      a,(handle)
         ld      (hl),a
 .handleResolved:
-        ; set stack pointer, program counter, and BC to zero|file handle
-.handleInBcSMC=$+1 ld bc,0
+        ; set stack pointer, program counter, and BC to 255 ("no handle")|file handle
+.handleInBcSMC=$+1 ld bc,255
         ld      hl,(nexHeader.PC)
         ; jump to entry point (or return to BASIC)
         ld      a,h
