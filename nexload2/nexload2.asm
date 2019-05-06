@@ -37,6 +37,7 @@
 ; - With a flag (bit 7 of number of handles?) to force close all existing open handles first.
 ;
 ; Changelist:
+; v2.3  06/05/2019 P7G    Maximum filename length bumped to 261 chars (LFN max)
 ; v2.2  06/05/2019 P7G    set up C to 255 in case there's no file handle (for C projects)
 ; v2.1  05/05/2019 P7G    fixing bug in Entry-bank setup
 ; v2    14/04/2019 P7G    fixing bug in palette loader
@@ -58,7 +59,7 @@
     ENDIF
 
 NEXLOAD_LOADER_VERSION      EQU     $12     ; V1.2 in bcd
-NEXLOAD_MAX_FNAME           EQU     128
+NEXLOAD_MAX_FNAME           EQU     262
 NEXLOAD_MAX_BANK            EQU     112
 
 NEXLOAD_LOADSCR_LAYER2      EQU     1       ; loads palette by default
