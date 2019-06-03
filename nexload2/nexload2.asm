@@ -2,10 +2,11 @@
 ; .nexload2
 ; © Peter Helcmanovsky 2019, license: https://opensource.org/licenses/MIT
 ;
-; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.12.0+)
-; Use options: --zxnext (--zxnext=cspect for TESTING snapshot)
+; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.13.1+)
+; For "testing" snapshot for CSpects use option: -DTESTING (or uncomment define below)
 ;
-; The NEX file format: http://devnext.referata.com/wiki/NEX_file_format
+; The NEX file format: https://specnext.dev/wiki/NEX_file_format
+; For file format roadmap (things which may eventually happen) check the wiki link above.
 ;
 ; Differences from current NEXLOAD (© Jim Bagley):
 ; - some extra checks of NEX file validity
@@ -21,22 +22,15 @@
 ; Included test files (tm**.nex) were created from official distribution tilemap demo,
 ; which is included in official distribution under MIT license (AFAIK).
 ;
-; Roadmap (things which may eventually happen, if enough effort + acceptance...):
+; Roadmap (only for this particular loader, for file format check wiki):
 ; # documentation
 ; - add docs for "preserve NextRegs", i.e. what environment can the code expect after load
-; # probably compatible with current V1.2 file format
-; - checking machine memory and use the RAMREQ to report low memory
-; - passing cmd line args to the loaded code (ideally in C-compatible way)
-; - having entry bank dynamically allocated by NextZXOS (entrybank = 255?)
+; # code
 ; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
-; # V1.3+
-; - checksums incorporated into the NEX file (maybe into header?) - mostly for file archival/transfers, not loader itself
-; - custom palettes also for ULA/HiRes/HiCol screens (maybe +64 flag?)
-; - tilemap screen
-; - return multiple open file handles to the .nex file. Specify how many handles and an address in the header.
-; - With a flag (bit 7 of number of handles?) to force close all existing open handles first.
 ;
 ; Changelist:
+; v2.4  03/06/2019 P7G    Core version check only on Next (machine_id), comments updated,
+;                         and syntax of source updated with sjasmplus v1.13.1 features
 ; v2.3  06/05/2019 P7G    Maximum filename length bumped to 261 chars (LFN max)
 ; v2.2  06/05/2019 P7G    set up C to 255 in case there's no file handle (for C projects)
 ; v2.1  05/05/2019 P7G    fixing bug in Entry-bank setup
@@ -45,6 +39,7 @@
 ;
 ;-------------------------------
     device zxspectrum48
+    OPT reset --zxnext
 ;-------------------------------
 
 ;     DEFINE TESTING
@@ -53,6 +48,7 @@
     DEFINE SP_ADDRESS   $3D00
 
     IFDEF TESTING
+        OPT --zxnext=cspect
         UNDEFINE ORG_ADDRESS
         DEFINE ORG_ADDRESS      $8003
         DEFINE TEST_CODE_PAGE   223         ; using the last page of 2MiB RAM (in CSpect emulator)
@@ -122,6 +118,7 @@ F_CLOSE                     equ $9B
 F_READ                      equ $9D
 FA_READ                     equ $01
 
+MACHINE_ID_NR00             equ $00
 NEXT_VERSION_NR01           equ $01
 PERIPHERAL_1_NR05           equ $05     ;Sets joystick mode, video frequency, Scanlines and Scandoubler.
 PERIPHERAL_2_NR06           equ $06     ;Enables Acceleration, Lightpen, DivMMC, Multiface, Mouse and AY audio.
@@ -179,9 +176,9 @@ PAGE_LENGTH     DB          ; high8b of amount of data to load into single page 
 
 ;; helper macros
 
-    MACRO ESXDOS service? : push hl : pop ix : rst $08 : db service? : ENDM     ; copies HL into IX
-    MACRO NEXTREG2A nextreg? : ld a,nextreg? : call readNextReg2A : ENDM
-    MACRO CSPECT_BREAK : IFDEF TESTING : break : ENDIF : ENDM
+ESXDOS      MACRO service? : push hl : pop ix : rst $08 : db service? : ENDM    ; copies HL into IX
+NEXTREG2A   MACRO nextreg? : ld a,nextreg? : call readNextReg2A : ENDM
+CSP_BREAK   MACRO : IFDEF TESTING : break : ENDIF : ENDM
 
 ;;-------------------------------
 ;; Start of the machine code itself
@@ -361,13 +358,7 @@ returnToBasic:  ; cleanup as much as possible
     ENDIF
 
 ;-------------------------------
-customErrorToBasic: ; HL = message with |80 last char
-        ld      a,$37               ; nop -> scf in exit path
-        ld      (returnToBasic.err),a
-        jr      returnToBasic
-
-;-------------------------------
-checkHeader:                ; CF=0 (no error), BC = bytes actually read from disk
+checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from disk
         ld      hl,NEXLOAD_HEADER   ; check if whole header was read
         sbc     hl,bc
         jr      nz,.FileIsNotNex
@@ -390,7 +381,11 @@ checkHeader:                ; CF=0 (no error), BC = bytes actually read from dis
         xor     $33         ; A = major.minor in packed BCD (if input was ASCII digits)
         cp      NEXLOAD_LOADER_VERSION+1
         jr      nc,.needsLoaderUpdate
-        ; check required core version
+        ; check if being run on other machine than Next => skip the core requirement check
+        NEXTREG2A MACHINE_ID_NR00
+        cp      10          ; 8 = emulator, 10 = ZX Spectrum Next
+        ret     nz
+        ; check required core version (only on the ZX Spectrum Next itself)
         ld      a,(nexHeader.COREVERSION.V_MAJOR)
         swapnib
         ld      d,a
@@ -421,7 +416,13 @@ checkHeader:                ; CF=0 (no error), BC = bytes actually read from dis
         jr      customErrorToBasic  ; will reset some things second time, but nevermind
 .FileIsNotNex:  ; file header is too short, or doesn't contain "Next" string
         ld      hl,errTxt_NotNexFile
-        jr      customErrorToBasic
+        ;WARNING: fallthrough into customErrorToBasic
+
+;-------------------------------
+customErrorToBasic: ; HL = message with |80 last char
+        ld      a,$37               ; nop -> scf in exit path
+        ld      (returnToBasic.err),a
+        jp      returnToBasic
 
 ;-------------------------------
 screenBlocksDefs:           ; order of block definitions must be same as block order in file
@@ -1030,7 +1031,7 @@ testStart
 ;         INCLUDE "nexload2.test.progress.i.asm"  ; this was used to develop progress bars
         ; setup fake argument and launch loader
         ld      hl,testFakeName0
-        CSPECT_BREAK
+        CSP_BREAK
         jp      $2000
 ; screen-loader and basic functions test
 testFakeName0   DZ  "\"s p a c e.nex\""
@@ -1047,4 +1048,5 @@ testFakeName7   DB  " \" tmHiCol.nex \" ",0 ; invalid filename with spaces aroun
 charsetCopy:    DS      $300
 
         SAVESNA "nexload2.sna",testStart
+;         CSPECTMAP     ; wrong values because of DISP and structures (sjasmplus v1.13.1)
     ENDIF
