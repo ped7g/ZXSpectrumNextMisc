@@ -29,6 +29,7 @@
 ; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ;
 ; Changelist:
+; v2.5  19/12/2019 P7G    28Mhz for files V1.3+
 ; v2.4  03/06/2019 P7G    Core version check only on Next (machine_id), comments updated,
 ;                         and syntax of source updated with sjasmplus v1.13.1 features
 ; v2.3  06/05/2019 P7G    Maximum filename length bumped to 261 chars (LFN max)
@@ -54,7 +55,7 @@
         DEFINE TEST_CODE_PAGE   223         ; using the last page of 2MiB RAM (in CSpect emulator)
     ENDIF
 
-NEXLOAD_LOADER_VERSION      EQU     $12     ; V1.2 in bcd
+NEXLOAD_LOADER_VERSION      EQU     $12     ; V1.2 in bcd (supported version of file format)
 NEXLOAD_MAX_FNAME           EQU     262
 NEXLOAD_MAX_BANK            EQU     112
 
@@ -122,7 +123,7 @@ MACHINE_ID_NR00             equ $00
 NEXT_VERSION_NR01           equ $01
 PERIPHERAL_1_NR05           equ $05     ;Sets joystick mode, video frequency, Scanlines and Scandoubler.
 PERIPHERAL_2_NR06           equ $06     ;Enables Acceleration, Lightpen, DivMMC, Multiface, Mouse and AY audio.
-TURBO_CONTROL_NR07          equ $07     ;Turbo mode 0=3.5Mhz, 1=7Mhz, 2=14Mhz
+TURBO_CONTROL_NR07          equ $07     ;Turbo mode 0=3.5MHz, 1=7MHz, 2=14MHz, 3=28MHz
 PERIPHERAL_3_NR08           equ $08     ;Enables Stereo, Internal Speaker, SpecDrum, Timex Video Modes, Turbo Sound Next and NTSC/PAL selection.
 PERIPHERAL_4_NR09           equ $09     ;AY output modes, sprite_id_lock, kempston port, divMMC, scanlines config
 CORE_VERSION_NR0E           equ $0E
@@ -381,6 +382,11 @@ checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from
         xor     $33         ; A = major.minor in packed BCD (if input was ASCII digits)
         cp      NEXLOAD_LOADER_VERSION+1
         jr      nc,.needsLoaderUpdate
+        ; set turbo to 28MHz for file V1.3+
+        cp      $13
+        jr      c,.stayIn14MHz
+        nextreg TURBO_CONTROL_NR07,%11      ; set 28Mhz turbo
+.stayIn14MHz:
         ; check if being run on other machine than Next => skip the core requirement check
         NEXTREG2A MACHINE_ID_NR00
         cp      10          ; 8 = emulator, 10 = ZX Spectrum Next
@@ -550,8 +556,8 @@ setupBeforeBlockLoading:
 
         ;; special registers first (which are not overwritten completely)
         NEXTREG2A   PERIPHERAL_2_NR06
-        or      %10001001   ; turbo key ON, zxnDMA mode, disable lightpen, disable divMMC
-        and     %10001101   ; autopaging, enable multiface, keep PS/2, set AY mode
+        or      %00001001   ; keep F8 turbo key, set zxnDMA mode, keep F3 50/60Hz key,
+        and     %10101101   ; divMMC autopaging off, multiface on, keep PS/2, set AY mode
         out     (c),a       ; set nextreg (BC=$253B here)
 
         NEXTREG2A   PERIPHERAL_3_NR08
