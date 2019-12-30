@@ -29,6 +29,7 @@
 ; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ;
 ; Changelist:
+; v2.6  30/12/2019 P7G    V1.3 files support (EXPBUSDISABLE flag), 28MHz for everyone
 ; v2.5  19/12/2019 P7G    28Mhz for files V1.3+
 ; v2.4  03/06/2019 P7G    Core version check only on Next (machine_id), comments updated,
 ;                         and syntax of source updated with sjasmplus v1.13.1 features
@@ -40,7 +41,7 @@
 ;
 ;-------------------------------
     device zxspectrum48
-    OPT reset --zxnext
+    OPT reset --zxnext --syntax=abfw
 ;-------------------------------
 
 ;     DEFINE TESTING
@@ -55,7 +56,7 @@
         DEFINE TEST_CODE_PAGE   223         ; using the last page of 2MiB RAM (in CSpect emulator)
     ENDIF
 
-NEXLOAD_LOADER_VERSION      EQU     $12     ; V1.2 in bcd (supported version of file format)
+NEXLOAD_LOADER_VERSION      EQU     $13     ; V1.3 in bcd (supported version of file format)
 NEXLOAD_MAX_FNAME           EQU     262
 NEXLOAD_MAX_BANK            EQU     112
 
@@ -73,7 +74,7 @@ NEXLOAD_LOADSCR_HASPAL      EQU     NEXLOAD_LOADSCR_LAYER2|NEXLOAD_LOADSCR_LORES
                 DS      1, 'V'
 V_MAJOR         DB      '1'
                 DS      1, '.'
-V_MINOR         DB      '2'
+V_MINOR         DB      '3'
     ENDS
 
     STRUCT NEXLOAD_CORE_VERSION
@@ -106,6 +107,7 @@ HIRESCOL        DB      0       ; Timex 512x192 mode colour for port 255 (bits 5
 ENTRYBANK       DB      0       ; Bank to page into C000..FFFF area before start of NEX code
 FILEHANDLERET   DW      0       ; 0 = close file, 1..$3FFF = BC contains file handle
                                 ; $4000+ = file handle is written into memory at this address (after ENTRYBANK is paged in)
+EXPBUSDISABLE   DB      0       ; (V1.3) 0 = disable expansion bus in NextReg $80, 1 = do not modify $80
 RESERVED        DS      512-NEXLOAD_HEADER.RESERVED,0   ; fill up with zeroes to size 512
     ENDS
 
@@ -158,6 +160,7 @@ ULA_CTRL_NR68               equ $68
 TILEMAP_CTRL_NR6B           equ $6B
 TILEMAP_BASE_ADR_NR6E       equ $6E
 SPRITE_ATTR_3_INC_NR78      equ $78
+EXPANSION_BUS_CONTROL_NR80  equ $80
 
 TBBLUE_REGISTER_SEL_P243B   equ $243B
 TBBLUE_LAYER2_P123B         equ $123B
@@ -382,6 +385,12 @@ checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from
         xor     $33         ; A = major.minor in packed BCD (if input was ASCII digits)
         cp      NEXLOAD_LOADER_VERSION+1
         jr      nc,.needsLoaderUpdate
+        ; read the core version (even if the following check is not done, like in emulator)
+        NEXTREG2A NEXT_VERSION_NR01
+        ld      h,a
+        NEXTREG2A CORE_VERSION_NR0E
+        ld      l,a                 ; HL = board core version (xxxx'yyyy'zzzz'zzzz)
+        ld      (coreVerBoard),hl   ; store it for error message routine (and other checks)
         ; check if being run on other machine than Next => skip the core requirement check
         NEXTREG2A MACHINE_ID_NR00
         cp      10          ; 8 = emulator, 10 = ZX Spectrum Next
@@ -396,12 +405,8 @@ checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from
         ld      a,(nexHeader.COREVERSION.V_SUBMINOR)
         ld      e,a         ; DE = required core version (xxxx'yyyy'zzzz'zzzz)
         ld      (coreVerHeader),de      ; store it for error message routine
-        NEXTREG2A NEXT_VERSION_NR01 ; now read the actual board value
-        ld      h,a
-        NEXTREG2A CORE_VERSION_NR0E
-        ld      l,a         ; HL = board core version (xxxx'yyyy'zzzz'zzzz)
-        ld      (coreVerBoard),hl       ; store it for error message routine
-        sub     hl,de
+        ; CF=0 from `or d` above
+        sbc     hl,de
         ret     nc          ; CF=0 -> board core is enough up to date
 .needsCoreUpdate:
         call    prepareForErrorOutput
@@ -539,6 +544,9 @@ setupBeforeBlockLoading:
         call    nz,setupProgressBar             ; configure progress bar routine
         ; configure rest of the loader
         nextreg TURBO_CONTROL_NR07,%11          ; set 28MHz turbo
+        ld      a,(nexHeader.EXPBUSDISABLE)
+        or      a
+        call    z,disableExpansionBus
         ld      a,(nexHeader.PRESERVENEXTREG)
         or      a
         ret     nz          ; next regs should be preserved, only 14MHz is set, keep others
@@ -694,6 +702,22 @@ ulaClassicPalette:
         db      $00,$02,$A0,$A2,$14,$16,$B4,$B6
         db      $00,$03,$E0,$E7,$1C,$1F,$FC,$FF
         db      0                       ; data terminator
+
+;-------------------------------
+disableExpansionBus:
+    ; V1.3 file feature, when 0 (default value in V1.2) -> disable expansion bus
+    ; else (non zero value) do nothing (this subroutine is called after the check already)
+    ; (!) The whole feature is applied only for cores 3.0.5+
+        ; check core version
+        ld      hl,(coreVerBoard)
+        ld      de,$3005
+        sub     hl,de       ; fake (adds `or a` ahead)
+        ret     c           ; don't touch NextReg $80 when core is older than 3.0.5
+        ; disable Expansion bus, enable I/O cycles and /IORQULA, enable memory cycles and /ROMCS
+        NEXTREG2A   EXPANSION_BUS_CONTROL_NR80
+        and     %00001111
+        out     (c),a       ; set nextreg (BC=$253B here)
+        ret
 
 ;-------------------------------
 readNextReg2A:
