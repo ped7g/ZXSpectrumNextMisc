@@ -245,8 +245,8 @@ start:
         call    fread
         call    checkHeader ; do the checks while the environment is minimally modified
 
-        ; setup environment further (14MHz, ULA CLS, reset all next regs, palettes, etc)
-        call    setupBeforeBlockLoading     ; if "preserve" flag is set, only 14MHz turbo is set
+        ; setup environment further (28MHz, ULA CLS, reset all next regs, palettes, etc)
+        call    setupBeforeBlockLoading
 
         ; check if there's palette data 512B block and load it + set it up
         ld      a,(nexHeader.LOADSCR)
@@ -382,11 +382,6 @@ checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from
         xor     $33         ; A = major.minor in packed BCD (if input was ASCII digits)
         cp      NEXLOAD_LOADER_VERSION+1
         jr      nc,.needsLoaderUpdate
-        ; set turbo to 28MHz for file V1.3+
-        cp      $13
-        jr      c,.stayIn14MHz
-        nextreg TURBO_CONTROL_NR07,%11      ; set 28Mhz turbo
-.stayIn14MHz:
         ; check if being run on other machine than Next => skip the core requirement check
         NEXTREG2A MACHINE_ID_NR00
         cp      10          ; 8 = emulator, 10 = ZX Spectrum Next
@@ -537,20 +532,20 @@ LoadFilePalette:
         ret
 
 ;-------------------------------
-; setup environment further (14MHz, reset next regs if enabled, ULA CLS, reset palettes, ...)
+; setup environment further (28MHz, reset next regs if enabled, ULA CLS, reset palettes, ...)
 setupBeforeBlockLoading:
         ld      a,(nexHeader.LOADBAR)
         or      a
         call    nz,setupProgressBar             ; configure progress bar routine
         ; configure rest of the loader
-        nextreg TURBO_CONTROL_NR07,%10          ; set 14MHz turbo
+        nextreg TURBO_CONTROL_NR07,%11          ; set 28MHz turbo
         ld      a,(nexHeader.PRESERVENEXTREG)
         or      a
         ret     nz          ; next regs should be preserved, only 14MHz is set, keep others
 
         ;;; reset all next regs to default state
 
-        ;; stop Copper asap (and in correct sequence)
+        ;; stop Copper asap (control byte first, but it should not really matter)
         nextreg COPPER_CTRL_HI_BYTE_NR62, 0     ; STOP + clear high part of CPC
         nextreg COPPER_CTRL_LO_BYTE_NR61, 0     ; clear low part of CPC
 
