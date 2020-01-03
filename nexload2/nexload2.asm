@@ -243,7 +243,7 @@ start:
         ld      a,h
         or      l
         jp      z,emptyLineFinish   ; HL=0
-        ld      (originalHL),hl
+        ld      (start.HL),hl       ; remember pointer to original argument data
         ; skip leading spaces and parse filename from command line
         dec     hl
 .skipLeadingSpace:
@@ -316,6 +316,12 @@ start:
         or      a
         call    nz,LoadCopperBlock
 
+        ; make backup copy of arguments into inner buffer (original data are Bank 5)
+.HL=$+1:ld      hl,0
+        ld      de,innerBuffer
+        ld      bc,SIZE_OF_INNER_BUFFER
+        ldir
+
         ; check the file offset against BANKSOFFSET
         ld      a,(nexFileVersion)
         cp      $13
@@ -378,7 +384,7 @@ start:
         ld      a,b
         or      c
         jr      z,.noCliBufferProvided
-        ld      hl,(originalHL)
+        ld      hl,innerBuffer
         ldir                    ; copy the CLI buffer as is (truncated by max size)
 .noCliBufferProvided:
         ; pass file handle or close file
@@ -681,7 +687,7 @@ LoadScr_finish:
 LoadScr_showTiles:
     ; palette block is mandatory for tile mode screen, the last 4B are init data!
     ; so only 254 colours are legit, last 4B are next regs: $6B, $6C, $6E, $6F
-        ld      hl,filePalette+254*2
+        ld      hl,innerBuffer+254*2
         ld      a,(hl)
         inc     hl
         nextreg TILEMAP_CTRL_NR6B,a
@@ -725,7 +731,7 @@ LoadScr_showHiRes:
 
 ;-------------------------------
 LoadFilePalette:
-        ld      hl,filePalette
+        ld      hl,innerBuffer
         ld      bc,$200
         call    fread
         nextreg PALETTE_CONTROL_NR43,%0'001'000'0   ; NR43=Layer2 first palette
@@ -745,7 +751,7 @@ LoadFilePalette:
         ; LoRes palette is set only if Layer2 screen is not in the file (L2+LoRes=fail)
 .setPalette:
         nextreg PALETTE_INDEX_NR40,0        ; reset colour index to 0
-        ld      hl,filePalette              ; and BC=$0200 from fread
+        ld      hl,innerBuffer              ; and BC=$0200 from fread
 .loop:  ld      a,(hl)
         inc     hl
         nextreg PALETTE_VALUE_BIT9_NR44,a
@@ -756,13 +762,10 @@ LoadFilePalette:
 
 ;-------------------------------
 LoadCopperBlock:
-        ld      b,2048/$200     ; 4x 512 = 2048B (buffer has only 512B)
-.next512Bblock:
-        push    bc
-        ld      hl,filePalette
-        ld      bc,$200
+        ld      hl,innerBuffer
+        ld      bc,$800
         call    fread
-        ld      hl,filePalette
+        ld      hl,innerBuffer
 .setCopperDataLoop:
         ld      a,(hl)
         inc     hl
@@ -770,8 +773,6 @@ LoadCopperBlock:
         dec     c
         jr      nz,.setCopperDataLoop
         djnz    .setCopperDataLoop
-        pop     bc
-        djnz    .next512Bblock
         nextreg COPPER_CTRL_HI_BYTE_NR62,$40    ; reset CPC and start the copper
         ret
 
@@ -1204,13 +1205,14 @@ last:       ; after last machine code byte which should be part of the binary
 
     ;; reserved space for values (but not initialized, i.e. not part of the binary)
 nexFileVersion  db      0       ; BCD-packed ($13 for V1.3)
-originalHL      dw      0       ; original pointer to line buffer
 esxError        ds      34
 filename        ds      NEXLOAD_MAX_FNAME
 nexHeader       NEXLOAD_HEADER
-filePalette     ds      $200    ; will be re-used also for copper code load
+    ; buffer for palette, copper code and line arguments (in this order)
+SIZE_OF_INNER_BUFFER    EQU     $800    ; at least 2kiB for full copper code load
+innerBuffer     ds      SIZE_OF_INNER_BUFFER
 
-lastReserved:   ASSERT  lastReserved < $3000
+lastReserved:   ASSERT  lastReserved < $3400
     ENDT        ;; end of DISP
 
     IFNDEF TESTING
