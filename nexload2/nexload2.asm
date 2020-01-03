@@ -29,7 +29,9 @@
 ; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ;
 ; Changelist:
-; v2.6  30/12/2019 P7G    V1.3 files support (EXPBUSDISABLE flag), 28MHz for everyone
+; v2.6  03/01/2020 P7G    V1.3 files support (EXPBUSDISABLE flag), 28MHz for everyone
+;                         V1.3 prototype (subject to changes before finalized):
+;                           BANKSOFFSET, LOADSCR2, CLIBUFFER, HASCOPPERCODE, CRC32C
 ; v2.5  19/12/2019 P7G    28Mhz for files V1.3+
 ; v2.4  03/06/2019 P7G    Core version check only on Next (machine_id), comments updated,
 ;                         and syntax of source updated with sjasmplus v1.13.1 features
@@ -65,8 +67,13 @@ NEXLOAD_LOADSCR_ULA         EQU     2       ; can't have palette
 NEXLOAD_LOADSCR_LORES       EQU     4       ; loads palette by default
 NEXLOAD_LOADSCR_HIRES       EQU     8       ; Timex HiRes (no palette)
 NEXLOAD_LOADSCR_HICOL       EQU     16      ; Timex HiCol (no palette)
+NEXLOAD_LOADSCR_EXT2        EQU     64      ; activate extension LOADSCR2 field in V1.3
 NEXLOAD_LOADSCR_NOPAL       EQU     128     ; no palette for Layer2/Lores
-NEXLOAD_LOADSCR_HASPAL      EQU     NEXLOAD_LOADSCR_LAYER2|NEXLOAD_LOADSCR_LORES
+NEXLOAD_LOADSCR_HASPAL      EQU     NEXLOAD_LOADSCR_LAYER2|NEXLOAD_LOADSCR_LORES|NEXLOAD_LOADSCR_EXT2
+NEXLOAD_LOADSCR2_NONE       EQU     0
+NEXLOAD_LOADSCR2_320x256x8  EQU     1
+NEXLOAD_LOADSCR2_640x256x4  EQU     2
+NEXLOAD_LOADSCR2_TILEMODE   EQU     3
 
 ;; NEX header structures
 
@@ -107,9 +114,34 @@ HIRESCOL        DB      0       ; Timex 512x192 mode colour for port 255 (bits 5
 ENTRYBANK       DB      0       ; Bank to page into C000..FFFF area before start of NEX code
 FILEHANDLERET   DW      0       ; 0 = close file, 1..$3FFF = BC contains file handle
                                 ; $4000+ = file handle is written into memory at this address (after ENTRYBANK is paged in)
-EXPBUSDISABLE   DB      0       ; (V1.3) 0 = disable expansion bus in NextReg $80, 1 = do not modify $80
-RESERVED        DS      512-NEXLOAD_HEADER.RESERVED,0   ; fill up with zeroes to size 512
+; V1.3 features
+EXPBUSDISABLE   DB      0       ; 0 = disable expansion bus in NextReg $80, 1 = do not modify $80
+
+;FIXME - finalize V1.3 design with SevenFFF / RVG / Bagley - PROPOSAL follows
+HASCHECKSUM     DB      0       ; 0 = no checksum, 1 = has CRC-32C (Castagnoli) checksum (see end of header CRC32C field)
+BANKSOFFSET     DD      0       ; where in the file the first bank starts (mandatory value, only V1.0-V1.2 can have 0)
+    ; Can be used in future by loaders to try to load even file versions unknown to them (or emus to speed up loading) -
+    ; as BANKS + BANKSOFFSET should cover the "important" part of file, and between are loader screens/etc.
+    ; but some SW may expect the initial state of machine to include the loader screens, so this may then break the SW
+CLIBUFFER       DW      0       ; pointer to buffer for copy of original command line (after ENTRYBANK is paged in)
+CLIBUFFERSIZE   DW      0       ; buffer size - the string is zero terminated if smaller, else just truncated (no zero)
+    ; if CLIBUFFER is set, DE is initially set to the CLIBUFFER value (no length info, code must know)
+    ; FIXME verify that the original data passed into the NEXLOAD2 are outside of $4000..$FFFF range
+    ;  - if inside, mitigate the issue by doing temporary early copy, the TESTING variant has buffer in RAM (overwritten by Bank 2 during load)
+LOADSCR2        DB      0       ; when LOADSCR |= 64
+    ; 1 = Layer 2 320x256x8bpp (NOPAL flag from LOADSCR does apply): [512B palette +] 81920B data (HIRESCOL is L2 palette offset)
+    ; 2 = Layer 2 640x256x4bpp (NOPAL flag from LOADSCR does apply): [512B palette +] 81920B data (HIRESCOL is L2 palette offset)
+    ; 3 = Tilemode: 512B palette = 508B color data (254 colors only) + 4B NextRegs $6B, $6C, $6E, $6F (Tilemode configuration)
+    ;     Palette block is mandatory, NOPAL flag in LOADSCR is invalid (and behaviour undefined)
+    ;     Tilemap data are expected to be stored in regular bank 5 - no specialized data block, bank 5 is first any way
+HASCOPPERCODE   DB      0       ; 1 = copper code 2048B block after last screen block, starts Copper with %01 control code
+RESERVED        DS      508-NEXLOAD_HEADER.RESERVED,0   ; fill up with zeroes to size 512
+CRC32C          DD      0       ; little-endian checksum value (for external tools, not used by loaders)
+    ; the checksum is calculated as: file offset 512 -> <EOF>, then first 508 bytes (header w/o last 4B)
+    ; last 4B of header (offset 508) will be the CRC-32C value itself (not included in CRC calculation)
+    ; (expect most of the NEX files to omit the CRC value) (note the CRC covers also appended binary data)
     ENDS
+    ASSERT 512 == NEXLOAD_HEADER
 
 ;; some further constants, mostly machine/API related
 
@@ -119,6 +151,8 @@ M_GETERR                    equ $93
 F_OPEN                      equ $9A
 F_CLOSE                     equ $9B
 F_READ                      equ $9D
+F_SEEK                      equ $9F
+F_FGETPOS                   equ $A0
 FA_READ                     equ $01
 
 MACHINE_ID_NR00             equ $00
@@ -137,7 +171,8 @@ CLIP_WINDOW_ULA_NR1A        equ $1A
 CLIP_WINDOW_TILEMAP_NR1B    equ $1B
 CLIP_WINDOW_CTRL_NR1C       equ $1C
 RASTER_INT_CTRL_NR22        equ $22
-SOUNDDRIVE_PORT_MIRROR_NR2D equ $2D
+ULA_OFS_X_NR26              equ $26
+ULA_OFS_Y_NR27              equ $27
 TILEMAP_OFS_X_MSB_NR2F      equ $2F
 SPRITE_MIRROR_INDEX_NR34    equ $34
 PALETTE_INDEX_NR40          equ $40     ;Chooses a ULANext palette number to configure.
@@ -156,9 +191,15 @@ MMU6_NR56                   equ $56     ;Set a Spectrum RAM page at position 0xC
 MMU7_NR57                   equ $57     ;Set a Spectrum RAM page at position 0xE000 to 0xFFFF
 COPPER_CTRL_LO_BYTE_NR61    equ $61
 COPPER_CTRL_HI_BYTE_NR62    equ $62
+COPPER_DATA_16B_NR63        equ $63
 ULA_CTRL_NR68               equ $68
+DISPLAY_CTRL_NR69           equ $69
+LORES_CTRL_NR6A             equ $6A
 TILEMAP_CTRL_NR6B           equ $6B
+TILEMAP_DEFAULT_ATTR_NR6C   equ $6C
 TILEMAP_BASE_ADR_NR6E       equ $6E
+TILEMAP_GFX_ADR_NR6F        equ $6F
+LAYER2_CTRL_NR70            equ $70
 SPRITE_ATTR_3_INC_NR78      equ $78
 EXPANSION_BUS_CONTROL_NR80  equ $80
 
@@ -171,10 +212,13 @@ LORES_ENABLE                = %10000000
 
     STRUCT SCREEN_BLOCK_DEF
 TRIGGER_BIT     DB          ; bit in NEXLOAD_HEADER.LOADSCR to trigger this block
-DRAW_PIX_STRIP  DW          ; draw pixel strip routine for loading-bar support
+LOADSCR2_BYTE   DB          ; V1.3 extended format value to check (0 for V1.0-V1.2 files)
+LAYER_CTRL_NR15 DB          ; sprites + layer priority control
+DISPLAY_NR69    DB          ; direct value for NextReg $69 -> makes L2/ULA/Timex visible
+DRAW_PIX_STRIP  DB          ; draw pixel strip routine for loading-bar support (low byte)
 INIT_CODE       DW          ; address of code which will make the loaded data show
 TARGET_PAGE     DB          ; first MMU page
-PAGES_COUNT     DB          ; amount of pages to load
+PAGES_COUNT     DB          ; amount of pages to load (+1 for extra "dec d" at start of loop)
 PAGE_LENGTH     DB          ; high8b of amount of data to load into single page (max 8k)
     ENDS
 
@@ -193,15 +237,13 @@ __bin_b DISP    DISP_ADDRESS
 
 start:
         ; switch Layer2 write-over-ROM OFF first, the code needs write to $2000..$3FFF
-        ld      bc,TBBLUE_LAYER2_P123B      ; (it's probably already disabled by dot
-        in      a,(c)                       ; command loader, but just in case...)
-        and     ~1          ; clear bit 0
-        out     (c),a
+        call    switchLayer2Off     ; will also make Layer2 switch off, but that's ok?!
         ; initial setup and checks of command line
         ld      (oldStack),sp
         ld      a,h
         or      l
         jp      z,emptyLineFinish   ; HL=0
+        ld      (originalHL),hl
         ; skip leading spaces and parse filename from command line
         dec     hl
 .skipLeadingSpace:
@@ -263,10 +305,44 @@ start:
 .screenBlocksLoop:
         add     hl,SCREEN_BLOCK_DEF
         ld      a,(nexHeader.LOADSCR)
+        push    hl
         and     (hl)
         call    nz,LoadScreenBlock
+        pop     hl
         or      (hl)
         jr      nz,.screenBlocksLoop
+
+        ld      a,(nexHeader.HASCOPPERCODE)
+        or      a
+        call    nz,LoadCopperBlock
+
+        ; check the file offset against BANKSOFFSET
+        ld      a,(nexFileVersion)
+        cp      $13
+        jr      c,.skipFposCheck ; file format V1.0 .. V1.2 don't contain BANKSOFFSET value
+
+        ; original FGETPOS variant, missing on CSpect and ZEsarUX, didn't try with full OS
+;         ld      a,(handle)
+;         rst     $08
+;         DB      F_FGETPOS       ; BCDE = current file pointer
+
+        ; alternate F_SEEK variant, which works even in current CSpect without full OS
+        ld      a,(handle)
+        sbc     hl,hl           ; HL = 0 (CF=0 from previous CP)
+        ld      bc,hl           ; fake
+        ld      de,hl           ; fake
+        inc     l               ; ADD fwd mode $01
+        ESXDOS  F_SEEK          ; BCDE = current file pointer
+        ; end of alternate F_SEEK variant   ; TODO switch to FGETPOS one day...
+
+        jr      c,.skipFposCheck    ; should not fail?! but if it ever does, skip check
+        ld      hl,(nexHeader.BANKSOFFSET)
+        sbc     hl,de           ; CF=0 from F_FGETPOS
+        jp      nz,V_1_3_BanksOffsetTestFailed
+        ld      hl,(nexHeader.BANKSOFFSET+2)
+        sbc     hl,bc           ; CF=0 from previous SBC
+        jp      nz,V_1_3_BanksOffsetTestFailed
+.skipFposCheck:
 
         ;; load all 16k banks marked as included in header data
         ; the header true/false array is in C order (0,1,2,...)
@@ -293,6 +369,18 @@ start:
         ; map entry bank (for NEX files before V1.2 there should be zero in header = OK)
         ld      a,(nexHeader.ENTRYBANK)
         call    mapBankAToSlot3
+        ; copy the full CLI buffer as it was given initially to NEXLOAD2
+        ld      de,(nexHeader.CLIBUFFER)
+        ld      bc,(nexHeader.CLIBUFFERSIZE)
+        ld      a,d
+        or      e
+        jr      z,.noCliBufferProvided
+        ld      a,b
+        or      c
+        jr      z,.noCliBufferProvided
+        ld      hl,(originalHL)
+        ldir                    ; copy the CLI buffer as is (truncated by max size)
+.noCliBufferProvided:
         ; pass file handle or close file
         ld      hl,(nexHeader.FILEHANDLERET)
         ld      a,h
@@ -332,14 +420,6 @@ emulateRst20:
         ld      hl,(nexHeader.PC)   ; reload the HL and jump to that new code patch
         jp      .JpHlInRom-4
     ENDIF
-;-------------------------------
-cleanupBeforeBasic:                 ; internal cleanup, before the need of old stack (must preserve HL)
-        call    fclose
-        call    switchLayer2Off
-        ; map C000..FFFF region back to BASIC bank
-        ld      a,($5b5c)
-        and     7
-        jp      mapBankAToSlot3
 
 ;-------------------------------
 emptyLineFinish:                    ; here the stack is still old one (OS/BASIC)
@@ -360,6 +440,98 @@ returnToBasic:  ; cleanup as much as possible
         ld      (nexHeader.PC),hl   ; make it as "start address" of NEX
         jr      emulateRst20
     ENDIF
+
+;-------------------------------
+; put any draw PixelStrip routine into this area, to have them all with same hi-byte address
+drawPixelStrip_Area:
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; ULA draws 1x2px strip per +1 in E, 224 range = 224x2px bar
+drawPixelStrip_Ula:
+        nextreg MMU7_NR57, 5*2      ; map the ULA screen to E000..FFFF (!)
+        push    hl
+        ld      d,$BE               ; last two lines of ULA
+        pixelad                     ; HL = classic ULA address (at $4000)
+        add     hl,$A000            ; transform VRAM address into E000 range
+        call    .xorPixel
+        pixeldn                     ; move one pixel down
+        call    .xorPixel
+        pop     hl
+        ret
+.xorPixel:
+        setae                       ; A = bit-pixel from E coordinate
+        xor     (hl)                ; xor the pixel
+        ld      (hl),a
+        ret
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; LoRes draws 1px per +1 in E, but alternates lines 94/95, 224 range = 112x2px bar
+drawPixelStrip_LoRes:
+        nextreg MMU7_NR57, 5*2+1    ; map the very bottom of LoRes to E000..FFFF
+        ld      d,$F7               ; last two lines of LoRes
+        rrc     e                   ; trade last bit of x-axis for y-axis
+        ld      a,(nexHeader.LOADBARCOL)
+        ld      (de),a
+        rlc     e                   ; restore E back to 16..240 range
+        ret
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; 320x256 / 640x256 draws 1x2/2x2 strip per +1 in E, 224 range = 224x2px/448x2px bar
+drawPixelStrip_L2rot:
+        push    de
+        ld      a,e
+        or      $E0
+        ld      d,a                 ; $E0 | bottom 5 bits = high byte adr for MMU7
+        ; calculate bank number by doing "div 32" to 9bit X (CF:A).
+        ld      a,e                 ; CF=0 from OR above, A=16..239
+        rra                         ; now do div 32 of 9b value (CF:A)
+        swapnib
+        and     $0F                 ; bank number 0..15 (per 32 pixel strips, per 8kiB)
+        add     a,LAYER2_BANK*2+1   ; add extra +1 to do shift bar +32px to right (centers it)
+        nextreg MMU7_NR57,a         ; map the very bottom of Layer2 to E000..FFFF
+        ; finalize address in DE, draw two pixels at [x+32,254] and [x+32,255]
+        ld      e,$FE               ; Y=254
+        ld      a,(nexHeader.LOADBARCOL)
+        ld      (de),a
+        inc     e                   ; +1 = pixel below
+        ld      (de),a
+        pop     de                  ; E must be restored
+        ret
+
+;-------------------------------
+; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
+; Layer2 draws 1x2 strip per +1 in E, 224 range = 224x2px bar
+drawPixelStrip_L2:
+        nextreg MMU7_NR57, LAYER2_BANK*2+5  ; map the very bottom of Layer2 to E000..FFFF
+        ld      d,$FE                       ; last two lines of Layer2
+        ld      a,(nexHeader.LOADBARCOL)
+        ld      (de),a
+        inc     d
+        ld      (de),a
+drawPixelStrip_None:
+        ret
+
+;-------------------------------
+; END OF  draw PixelStrip area
+        ASSERT high $ == high drawPixelStrip_Area
+
+;-------------------------------
+cleanupBeforeBasic:                 ; internal cleanup, before the need of old stack (must preserve HL)
+        call    fclose
+        call    switchLayer2Off
+        ; map C000..FFFF region back to BASIC bank
+        ld      a,($5b5c)
+        and     7
+        jp      mapBankAToSlot3
+
+V_1_3_BanksOffsetTestFailed:
+        call    prepareForErrorOutput
+        ld      sp,(oldStack)
+        ld      hl,errTxt_BanksOffsetMismatch
+        jp      customErrorToBasic  ; will reset some things second time, but nevermind
 
 ;-------------------------------
 checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from disk
@@ -383,6 +555,7 @@ checkHeader:                ; in: CF=0 (no error), BC = bytes actually read from
         swapnib
         xor     c
         xor     $33         ; A = major.minor in packed BCD (if input was ASCII digits)
+        ld      (nexFileVersion),a
         cp      NEXLOAD_LOADER_VERSION+1
         jr      nc,.needsLoaderUpdate
         ; read the core version (even if the following check is not done, like in emulator)
@@ -432,36 +605,57 @@ customErrorToBasic: ; HL = message with |80 last char
 
 ;-------------------------------
 screenBlocksDefs:           ; order of block definitions must be same as block order in file
-                            ; trigger_bit, init, page, count, pg_length
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LAYER2, drawPixelStrip_L2,    LoadScr_showLayer2, LAYER2_BANK*2, 6, $20}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,    drawPixelStrip_Ula,   LoadScr_showUla,    5*2,           1, $1B}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LORES,  drawPixelStrip_LoRes, LoadScr_showLoRes,  5*2,           2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES,  drawPixelStrip_Ula,   LoadScr_showHiRes,  5*2,           2, $18}
-        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL,  drawPixelStrip_Ula,   LoadScr_showHiCol,  5*2,           2, $18}
+        ; trigger_bit, loadscr2, NR15, NR69, draw_bar, init, page, count+1, pg_length
+NR15v   EQU     GRAPHIC_PRIORITIES_SLU+GRAPHIC_SPRITES_VISIBLE
+NR69v   EQU     0
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LAYER2, NEXLOAD_LOADSCR2_NONE,      NR15v,     NR69v+$80, low drawPixelStrip_L2,    LoadScr_showLayer2,  LAYER2_BANK*2, 6+1, $20}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_ULA,    NEXLOAD_LOADSCR2_NONE,      NR15v,     NR69v,     low drawPixelStrip_Ula,   LoadScr_finish,      5*2,           1+1, $1B}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_LORES,  NEXLOAD_LOADSCR2_NONE,      NR15v+$80, NR69v,     low drawPixelStrip_LoRes, LoadScr_finish,      5*2,           2+1, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HIRES,  NEXLOAD_LOADSCR2_NONE,      NR15v,     NR69v+$06, low drawPixelStrip_Ula,   LoadScr_showHiRes,   5*2,           2+1, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_HICOL,  NEXLOAD_LOADSCR2_NONE,      NR15v,     NR69v+$02, low drawPixelStrip_Ula,   LoadScr_finish,      5*2,           2+1, $18}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_EXT2,   NEXLOAD_LOADSCR2_320x256x8, NR15v,     NR69v+$80, low drawPixelStrip_L2rot, LoadScr_show320x256, LAYER2_BANK*2,10+1, $20}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_EXT2,   NEXLOAD_LOADSCR2_640x256x4, NR15v,     NR69v+$80, low drawPixelStrip_L2rot, LoadScr_show640x256, LAYER2_BANK*2,10+1, $20}
+        SCREEN_BLOCK_DEF    {NEXLOAD_LOADSCR_EXT2,   NEXLOAD_LOADSCR2_TILEMODE,  NR15v,     NR69v,     low drawPixelStrip_None,  LoadScr_showTiles,   5*2,           0+1, $20}
         DB                  0       ; terminator
 
 LoadScreenBlock:
-        push    hl          ; preserve original HL for caller
+        ; V1.3 extension of new types of screens - check the second byte when first bit matched
+        ld      a,(nexHeader.LOADSCR2)
+        inc     hl
+        cp      (hl)
+        ret     nz          ; this is not the correct block (only first bit matched)
         ld      a,(nexHeader.BORDERCOL)
         out     ($FE),a     ; change border colour
+        ; setup NR15 (sprites visibility, layers priority and LoRes enable)
+        inc     hl
+        ld      a,(hl)
+        nextreg SPRITE_CONTROL_NR15,a
+        ; read NR69 init value (do not set yet, may require patching by NEXLOAD_LOADSCR_HICOL)
+        inc     hl
+        ld      a,(hl)
+        ld      (LoadScr_finish.n),a    ; self-modify the `or $nn` instruction
+        ; setup draw pixel strip routine address
+        inc     hl
+        ld      a,(hl)
+        ld      (drawProgressBar.ds),a  ; setup progress bar draw pixel routine per gfx mode
+            ; only low byte is set, the high byte should be `high drawPixelStrip_Area`
+        ; setup init code address (pushed to stack for "retpoline")
         inc     hl
         ld      c,(hl)
         inc     hl
         ld      b,(hl)
-        inc     hl
-        ld      (drawProgressBar.ds),bc ; setup progress bar draw pixel routine per gfx mode
-        ld      c,(hl)
-        inc     hl
-        ld      b,(hl)
-        inc     hl
         push    bc          ; init code address on stack
+        ; MMU paging, count of pages, size of pages
+        inc     hl
         ld      e,(hl)      ; MMU page
         inc     hl
         ld      d,(hl)      ; count of pages
+        ld      c,0
         inc     hl
-        ld      b,(hl)
-        ld      c,0         ; BC = length of page block
+        ld      b,(hl)      ; BC = length of page block
 .pageLoop:
+        dec     d
+        ret     z           ; jump to init code, when no more pages to load
         ld      a,e         ; page-in the memory
         nextreg MMU7_NR57,a
         inc     e
@@ -469,61 +663,85 @@ LoadScreenBlock:
         ld      hl,$E000    ; target address to load (MMU7)
         call    fread       ; load the page block
         pop     de
-        dec     d
-        jr      nz,.pageLoop
-        ld      hl,LoadScr_showLayer2.l2b   ; address to self-modify (L2 visibility)
-        ld      c,GRAPHIC_PRIORITIES_SLU+GRAPHIC_SPRITES_VISIBLE    ; common setup
-        ret                 ; jump to init code
+        jr      .pageLoop
 
-LoadScr_showLayer2:         ; make Layer2 visible (on top of ULA)
-        ld      (hl),$CF    ; set 1,a (making Layer2 visible)
+LoadScr_showLayer2:
+        xor     a           ; mode 256x192, zero pal offset
+.customNr70:
+        nextreg LAYER2_CTRL_NR70,a
         nextreg LAYER2_RAM_NR12,LAYER2_BANK
-.finishScreenInitClassicUla:
-        xor     a           ; classic ULA
-.finishScreenInitTimex:
-        out     (255),a     ; set Timex modes
-        ; layer priorities, LoRes mode and sprites visibility
-        ld      a,c
-        nextreg SPRITE_CONTROL_NR15,a
-        ; layer2 visibility
-        ld      bc,TBBLUE_LAYER2_P123B
-        in      a,(c)
-.l2b=$+1 set    1,a         ; gets modified to set/res driving Layer2 visibility
-        out     (c),a
-        pop     hl          ; restore original HL
+LoadScr_finish:
+        xor     a
+.patchA:
+.n=$+1 :or      0           ; will be overwritten by NR69v from the definition block
+        ; make layer 2 / timex visible as per value in A
+        nextreg DISPLAY_CTRL_NR69,a
         ret
 
-LoadScr_showLoRes:
-        ld      (hl),$8F    ; res 1,a (making Layer2 invisible)
-        ld      c,GRAPHIC_PRIORITIES_SLU+GRAPHIC_SPRITES_VISIBLE+LORES_ENABLE
-        jr      LoadScr_showLayer2.finishScreenInitClassicUla
+LoadScr_showTiles:
+    ; palette block is mandatory for tile mode screen, the last 4B are init data!
+    ; so only 254 colours are legit, last 4B are next regs: $6B, $6C, $6E, $6F
+        ld      hl,filePalette+254*2
+        ld      a,(hl)
+        inc     hl
+        nextreg TILEMAP_CTRL_NR6B,a
+        ld      a,(hl)
+        inc     hl
+        nextreg TILEMAP_DEFAULT_ATTR_NR6C,a
+        ld      a,(hl)
+        inc     hl
+        nextreg TILEMAP_BASE_ADR_NR6E,a
+        ld      a,(hl)
+        inc     hl
+        nextreg TILEMAP_GFX_ADR_NR6F,a
+        jr      LoadScr_finish
+
+LoadScr_show640x256:
+        call    LoadScr_show320x256.setupClipWindowAndA
+        or      $20
+        jr      LoadScr_showLayer2.customNr70
+
+LoadScr_show320x256:
+        call    .setupClipWindowAndA
+        or      $10
+        jr      LoadScr_showLayer2.customNr70
+.setupClipWindowAndA:
+        nextreg CLIP_WINDOW_CTRL_NR1C,$01   ; reset L2 clip window index
+        xor     a
+        nextreg CLIP_WINDOW_LAYER2_NR18,a
+        nextreg CLIP_WINDOW_LAYER2_NR18,159
+        nextreg CLIP_WINDOW_LAYER2_NR18,a
+        dec     a
+        nextreg CLIP_WINDOW_LAYER2_NR18,a   ; set clip window to 0,159,0,255
+        ; set A to HIRESCOL & $0F => palette offset for LAYER2_CTRL_NR70
+        ld      a,(nexHeader.HIRESCOL)
+        and     $0F
+        ret
 
 LoadScr_showHiRes:
-        ld      (hl),$8F    ; res 1,a (making Layer2 invisible)
         ld      a,(nexHeader.HIRESCOL)
         and     %00111000
-        or      6
-        jr      LoadScr_showLayer2.finishScreenInitTimex
-
-LoadScr_showHiCol:
-        ld      (hl),$8F    ; res 1,a (making Layer2 invisible)
-        ld      a,2
-        jr      LoadScr_showLayer2.finishScreenInitTimex
-
-LoadScr_showUla:
-        ld      (hl),$8F    ; res 1,a (making Layer2 invisible)
-        jr      LoadScr_showLayer2.finishScreenInitClassicUla
+        jr      LoadScr_finish.patchA
 
 ;-------------------------------
 LoadFilePalette:
         ld      hl,filePalette
         ld      bc,$200
         call    fread
-        nextreg PALETTE_CONTROL_NR43,$10    ; NR43=Layer2 first palette
+        nextreg PALETTE_CONTROL_NR43,%0'001'000'0   ; NR43=Layer2 first palette
         ld      a,(nexHeader.LOADSCR)
         test    NEXLOAD_LOADSCR_LAYER2
         jr      nz,.setPalette              ; In case Layer2 screen is loaded (or L2+LoRes)
-        nextreg PALETTE_CONTROL_NR43,0      ; NR43=ULA first palette
+        ; check new V1.3 modes in second field of header
+        test    NEXLOAD_LOADSCR_EXT2
+        jr      z,.setUlaPalette            ; this is LoRes screen (not a new V1.3 mode)
+        ld      a,(nexHeader.LOADSCR2)
+        cp      NEXLOAD_LOADSCR2_TILEMODE
+        jr      nz,.setPalette              ; Layer2 320x256 or 640x256
+        nextreg PALETTE_CONTROL_NR43,%0'011'000'0   ; NR43=Tilemap first palette
+        jr      .setPalette
+.setUlaPalette:
+        nextreg PALETTE_CONTROL_NR43,0      ; NR43=ULA first palette (LoRes mode)
         ; LoRes palette is set only if Layer2 screen is not in the file (L2+LoRes=fail)
 .setPalette:
         nextreg PALETTE_INDEX_NR40,0        ; reset colour index to 0
@@ -534,6 +752,27 @@ LoadFilePalette:
         dec     c
         jr      nz,.loop
         djnz    .loop
+        ret
+
+;-------------------------------
+LoadCopperBlock:
+        ld      b,2048/$200     ; 4x 512 = 2048B (buffer has only 512B)
+.next512Bblock:
+        push    bc
+        ld      hl,filePalette
+        ld      bc,$200
+        call    fread
+        ld      hl,filePalette
+.setCopperDataLoop:
+        ld      a,(hl)
+        inc     hl
+        nextreg COPPER_DATA_16B_NR63,a
+        dec     c
+        jr      nz,.setCopperDataLoop
+        djnz    .setCopperDataLoop
+        pop     bc
+        djnz    .next512Bblock
+        nextreg COPPER_CTRL_HI_BYTE_NR62,$40    ; reset CPC and start the copper
         ret
 
 ;-------------------------------
@@ -549,7 +788,7 @@ setupBeforeBlockLoading:
         call    z,disableExpansionBus
         ld      a,(nexHeader.PRESERVENEXTREG)
         or      a
-        ret     nz          ; next regs should be preserved, only 14MHz is set, keep others
+        ret     nz          ; next regs should be preserved, only 28MHz is set, keep others
 
         ;;; reset all next regs to default state
 
@@ -574,15 +813,10 @@ setupBeforeBlockLoading:
 
         ;; regular registers (one write into each) (BC=$253B here)
         nextreg CLIP_WINDOW_CTRL_NR1C,$0F       ; reset all clip-window indices to zero
-        nextreg SOUNDDRIVE_PORT_MIRROR_NR2D,0
-        nextreg ULA_CTRL_NR68,0                 ; default ULA control values
 
         ;; still regular registers (grouped into consecutive groups, from table data)
         ld      hl,nextRegResetData
         call    SetNextRegistersByDataAdvReg
-
-        ;; special registers which require irregular write pattern (from next table data)
-        call    SetNextRegistersByData          ; hl = nextRegResetData2 here
 
         ;; set all sprites to invisible   (BC=$253B here)
         dec     b
@@ -590,12 +824,12 @@ setupBeforeBlockLoading:
         out     (c),a       ; select SPRITE_ATTR_3_INC_NR78 register
         ld      e,128       ; reset 128 sprites
         inc     b
+        xor     a
 .resetSpritesLoop:
-        out     (c),0
+        out     (c),a
         dec     e
         jr      nz,.resetSpritesLoop
         ; reset sprite index on $34 reg back to 0
-        xor     a
         nextreg SPRITE_MIRROR_INDEX_NR34,a
 
         call    switchLayer2Off
@@ -625,13 +859,11 @@ setupBeforeBlockLoading:
         ret
 
 ;-------------------------------
-SetNextRegistersByDataAdvReg:
-        ld      a,$3C       ; `inc a` instruction
-        jr      SetNextRegistersByData.setRegOp
 SetNextRegistersByData:
         xor     a           ; 'nop' instruction
-.setRegOp:
-        ld      (.RegOp),a  ; SMC self-modify-code - how the next reg changes between data
+        ; SMC self-modify-code - how the next reg changes between data
+        ld      (SetNextRegistersByDataAdvReg.RegOp),a
+SetNextRegistersByDataAdvReg:   ; "inc a" is the default register operation - just run
 .newBatchLoop:
         ld      a,(hl)      ; initial register number
         inc     hl
@@ -646,23 +878,33 @@ SetNextRegistersByData:
         ld      d,(hl)
         out     (c),d
         inc     hl          ; advance to next data
-.RegOp: nop         ; modify register number in A (actual operation depends...)
+.RegOp: inc     a           ; modify register number in A (actual operation depends...)
         dec     e           ; until all are set
         jr      nz,.setDataLoop
         jr      .newBatchLoop  ; read remaining setup data
 
         ;; regular next reg writes data
 nextRegResetData:
-        db      LAYER2_RAM_NR12, 6      ; set six registers starting from $12
+        db      LAYER2_RAM_NR12, 10     ; set ten registers starting from $12
         db      9, 12, $E3              ; Layer2 banks, Global transparency color
         db      GRAPHIC_PRIORITIES_SLU+GRAPHIC_SPRITES_VISIBLE  ; SLU order and sprites visible
         db      0, 0                    ; Layer2 offset
+        db      0, 0, 0, 0              ; X1 of clip windows (L2, sprite, ULA, tiles)
+        db      CLIP_WINDOW_LAYER2_NR18, 4      ; set X2 of clip windows
+        db      255, 255, 255, 159
+        db      CLIP_WINDOW_LAYER2_NR18, 4      ; set Y1 of clip windows
+        db      0, 0, 0, 0
+        db      CLIP_WINDOW_LAYER2_NR18, 4      ; set Y2 of clip windows
+        db      191, 191, 191, 255
 
         db      RASTER_INT_CTRL_NR22, 2 ; set two registers starting from $22 (raster int.)
         db      0, 0
 
+        db      ULA_OFS_X_NR26, 2       ; ULA offset (since core 3.0.5?)
+        db      0, 0
+
         db      TILEMAP_OFS_X_MSB_NR2F, 6   ; set six registers starting from $2F (tilemap ofs)
-        db      0, 0, 0, 0, 0, 0        ; tilemap ofs, ULA ofs, Sprite attribute index
+        db      0, 0, 0, 0, 0, 0        ; tilemap ofs, LoRes ofs, Sprite attribute index
 
         db      PALETTE_FORMAT_NR42, 2  ; set two registers starting from $42
         db      $0F, 0                  ; ink format to 15, select default palettes + ULA classic
@@ -677,24 +919,13 @@ nextRegResetData:
         db      $FF, $FF, 10, 11, 4, 5, 0, 1
     ENDIF
 
-        db      TILEMAP_CTRL_NR6B, 2    ; set two registers starting from $6B
-        db      0, 0                    ; default Tilemap control/attribute values
+        db      ULA_CTRL_NR68, 5
+        ; ULActrl=0, L2/shadowULA/Timex=0, LoResCtrl=0, TilemapCtrl=0, Tile_def_attr=0
+        db      0, 0, 0, 0, 0
 
-        db      TILEMAP_BASE_ADR_NR6E, 2    ; set two registers starting from $6E
-        db      0, 0                    ; default Tilemap base/gfx addresses
+        db      TILEMAP_BASE_ADR_NR6E, 3    ; set three registers starting from $6E
+        db      0, 0, 0                 ; default Tilemap base/gfx addresses, Layer2ctrl = 0
 
-        db      0                       ; data terminator
-
-nextRegResetData2:
-        ;; irregular regs data
-        db      CLIP_WINDOW_LAYER2_NR18, 4
-        db      0, 255, 0, 191
-        db      CLIP_WINDOW_SPRITES_NR19, 4
-        db      0, 255, 0, 191
-        db      CLIP_WINDOW_ULA_NR1A, 4
-        db      0, 255, 0, 191
-        db      CLIP_WINDOW_TILEMAP_NR1B, 4
-        db      0, 159, 0, 255
         db      0                       ; data terminator
 
 ulaClassicPalette:
@@ -776,51 +1007,6 @@ loadBankA:
         jr      bankLoadDelay
 
 ;-------------------------------
-; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
-; ULA draws 1x2px strip per +1 in E, 224 range = 224x2px bar
-drawPixelStrip_Ula:
-        nextreg MMU7_NR57, 5*2      ; map the ULA screen to E000..FFFF (!)
-        push    hl
-        ld      d,$BE               ; last two lines of ULA
-        pixelad                     ; HL = classic ULA address (at $4000)
-        add     hl,$A000            ; transform VRAM address into E000 range
-        call    .xorPixel
-        pixeldn                     ; move one pixel down
-        call    .xorPixel
-        pop     hl
-        ret
-.xorPixel:
-        setae                       ; A = bit-pixel from E coordinate
-        xor     (hl)                ; xor the pixel
-        ld      (hl),a
-        ret
-
-;-------------------------------
-; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
-; LoRes draws 1px per +1 in E, but alternates lines 94/95, 224 range = 112x2px bar
-drawPixelStrip_LoRes:
-        nextreg MMU7_NR57, 5*2+1    ; map the very bottom of LoRes to E000..FFFF
-        ld      d,$F7               ; last two lines of LoRes
-        rrc     e                   ; trade last bit of x-axis for y-axis
-        ld      a,(nexHeader.LOADBARCOL)
-        ld      (de),a
-        rlc     e                   ; restore E back to 16..240 range
-        ret
-
-;-------------------------------
-; E = X coordinate 16..224+16-1, must preserve HL, BC and E, modifies A, D
-; Layer2 draws 1x2 strip per +1 in E, 224 range = 224x2px bar
-drawPixelStrip_L2:
-        nextreg MMU7_NR57, LAYER2_BANK*2+5  ; map the very bottom of Layer2 to E000..FFFF
-        ld      d,$FE                       ; last two lines of Layer2
-        ld      a,(nexHeader.LOADBARCOL)
-        ld      (de),a
-        inc     d
-        ld      (de),a
-drawPixelStrip_None:
-        ret
-
-;-------------------------------
 drawProgressBar:    ; using Bresenham's line algorithm math to progress per banks-num
         ret         ; will become NOP if loaderbar is enabled, or RET when full-drawn/disabled
 .x=$+1  ld      de,$10      ; X-coordinate is designed to go in range 16..224+16-1
@@ -845,10 +1031,9 @@ drawProgressBar:    ; using Bresenham's line algorithm math to progress per bank
 setupProgressBar:
         xor     a
         ld      (drawProgressBar),a     ; ret -> nop, enabling progress bar drawing
-        ld      hl,(nexHeader.NUMBANKS)
-        ld      h,0                     ; HL = word(NUMBANKS)
-        add     hl,hl                   ; *2
-        ld      (drawProgressBar.b2),hl ; set "numbanks*2" value in draw routine
+        ld      a,(nexHeader.NUMBANKS)
+        add     a,a                     ; NUMBANKS*2
+        ld      (drawProgressBar.b2),a  ; set "numbanks*2" value in draw routine
         ret
 
 ;-------------------------------
@@ -1007,6 +1192,8 @@ errTxt_UpdateCore:
         DC      "Update core"
 errTxt_UpdateLoader:
         DC      "Update .nexload2"
+errTxt_BanksOffsetMismatch:
+        DC      "Header val BANKSOFFSET mismatch"
 
 ;-------------------------------
 coreVerHeader   dw      0
@@ -1016,10 +1203,12 @@ oldStack        dw      0
 last:       ; after last machine code byte which should be part of the binary
 
     ;; reserved space for values (but not initialized, i.e. not part of the binary)
+nexFileVersion  db      0       ; BCD-packed ($13 for V1.3)
+originalHL      dw      0       ; original pointer to line buffer
 esxError        ds      34
 filename        ds      NEXLOAD_MAX_FNAME
 nexHeader       NEXLOAD_HEADER
-filePalette     ds      $200
+filePalette     ds      $200    ; will be re-used also for copper code load
 
 lastReserved:   ASSERT  lastReserved < $3000
     ENDT        ;; end of DISP
@@ -1056,17 +1245,19 @@ testStart
 ;         INCLUDE "nexload2.test.progress.i.asm"  ; this was used to develop progress bars
         ; setup fake argument and launch loader
         ld      hl,testFakeName0
-        CSP_BREAK
+;         CSP_BREAK
         jp      $2000
 ; screen-loader and basic functions test
 testFakeName0   DZ  "\"s p a c e.nex\""
 ;  coreVersion.nex   loaderVersion.nex    \"s p a c e.nex\"  tmHiRes.nex   tmLoResNoPal.nex   tmNoStart.nex
 ;  empty.nex         preserveNextRegs.nex   tmHiCol.nex      tmLoRes.nex   tmNoPic.nex        tmUla.nex
+;  t320x256.nex      t640x256.nex
 ; name parsing test
 testFakeName1   DB  "   \"Warhawk.nex\" "
 testFakeName2   DB  "  NXtel.nex:"          ; leading space, colon
 testFakeName3   DB  "NextDAWDemo.nex",13    ; enter
 testFakeName4   DB  "ScrollNutter.nex",0    ; \0
+testFakeName5   DB  " CrowleyWorldTour.nex ",0
 testFakeName6   DB  "Daybreak.nex "         ; trailing space
 testFakeName7   DB  " \" tmHiCol.nex \" ",0 ; invalid filename with spaces around
 
