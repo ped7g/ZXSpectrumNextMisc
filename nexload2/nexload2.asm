@@ -25,13 +25,13 @@
 ; Roadmap (only for this particular loader, for file format check wiki):
 ; # documentation
 ; - add docs for "preserve NextRegs", i.e. what environment can the code expect after load
-; # code
-; - delays timed by raster line, not interrupt (then maybe preserve+restore DI/EI?)
 ;
 ; Changelist:
-; v2.6  03/01/2020 P7G    V1.3 files support (EXPBUSDISABLE flag), 28MHz for everyone
-;                         V1.3 prototype (subject to changes before finalized):
-;                           BANKSOFFSET, LOADSCR2, CLIBUFFER, HASCOPPERCODE, CRC32C
+; v2.6  07/01/2020 P7G    28MHz for everyone
+;                         load-delays driven by raster line, keeping DI for whole load
+;                         V1.3 files support, new fields:
+;                           EXPBUSDISABLE, BANKSOFFSET, LOADSCR2, CLIBUFFER, CRC32C
+;                           HASCOPPERCODE, TILESCRCONFIG, BIGL2BARPOSY, ...
 ; v2.5  19/12/2019 P7G    28Mhz for files V1.3+
 ; v2.4  03/06/2019 P7G    Core version check only on Next (machine_id), comments updated,
 ;                         and syntax of source updated with sjasmplus v1.13.1 features
@@ -116,27 +116,26 @@ FILEHANDLERET   DW      0       ; 0 = close file, 1..$3FFF = BC contains file ha
                                 ; $4000+ = file handle is written into memory at this address (after ENTRYBANK is paged in)
 ; V1.3 features
 EXPBUSDISABLE   DB      0       ; 0 = disable expansion bus in NextReg $80, 1 = do not modify $80
-
-;FIXME - finalize V1.3 design with SevenFFF / RVG / Bagley - PROPOSAL follows
 HASCHECKSUM     DB      0       ; 0 = no checksum, 1 = has CRC-32C (Castagnoli) checksum (see end of header CRC32C field)
 BANKSOFFSET     DD      0       ; where in the file the first bank starts (mandatory value, only V1.0-V1.2 can have 0)
     ; Can be used in future by loaders to try to load even file versions unknown to them (or emus to speed up loading) -
     ; as BANKS + BANKSOFFSET should cover the "important" part of file, and between are loader screens/etc.
     ; but some SW may expect the initial state of machine to include the loader screens, so this may then break the SW
 CLIBUFFER       DW      0       ; pointer to buffer for copy of original command line (after ENTRYBANK is paged in)
-CLIBUFFERSIZE   DW      0       ; buffer size - the string is zero terminated if smaller, else just truncated (no zero)
+CLIBUFFERSIZE   DW      0       ; buffer size - the string is zero/enter/colon terminated if smaller, else truncated (no terminator)
     ; if CLIBUFFER is set, DE is initially set to the CLIBUFFER value (no length info, code must know)
-    ; FIXME verify that the original data passed into the NEXLOAD2 are outside of $4000..$FFFF range
-    ;  - if inside, mitigate the issue by doing temporary early copy, the TESTING variant has buffer in RAM (overwritten by Bank 2 during load)
+    ; max buffer size is 2048, if the app needs longer argument lines, preserve banks which contain BASIC sysvars and edit line
+    ; and search for the full line remaining in original position (locate by clibuffer content or sysvars)
 LOADSCR2        DB      0       ; when LOADSCR |= 64
     ; 1 = Layer 2 320x256x8bpp (NOPAL flag from LOADSCR does apply): [512B palette +] 81920B data (HIRESCOL is L2 palette offset)
     ; 2 = Layer 2 640x256x4bpp (NOPAL flag from LOADSCR does apply): [512B palette +] 81920B data (HIRESCOL is L2 palette offset)
-    ; 3 = Tilemode: 512B palette = 508B color data (254 colors only) + 4B NextRegs $6B, $6C, $6E, $6F (Tilemode configuration)
-    ;     Palette block is mandatory, NOPAL flag in LOADSCR is invalid (and behaviour undefined)
+    ; 3 = Tilemode - config data are in TILESCRCONFIG array, (NOPAL flag from LOADSCR does apply): [512B palette]
     ;     Tilemap data are expected to be stored in regular bank 5 - no specialized data block, bank 5 is first any way
 HASCOPPERCODE   DB      0       ; 1 = copper code 2048B block after last screen block, starts Copper with %01 control code
+TILESCRCONFIG   DS      4, 0    ; NextReg registers $6B, $6C, $6E, $6F values for Tilemode screen loader
+BIGL2BARPOSY    DB      0       ; Y position (0..255) of loading bar for new Layer 2 320x256 and 640x256 modes
 RESERVED        DS      508-NEXLOAD_HEADER.RESERVED,0   ; fill up with zeroes to size 512
-CRC32C          DD      0       ; little-endian checksum value (for external tools, not used by loaders)
+CRC32C          DD      0       ; little-endian uint32_t checksum value (for external tools, not used by loaders)
     ; the checksum is calculated as: file offset 512 -> <EOF>, then first 508 bytes (header w/o last 4B)
     ; last 4B of header (offset 508) will be the CRC-32C value itself (not included in CRC calculation)
     ; (expect most of the NEX files to omit the CRC value) (note the CRC covers also appended binary data)
@@ -170,6 +169,7 @@ CLIP_WINDOW_SPRITES_NR19    equ $19
 CLIP_WINDOW_ULA_NR1A        equ $1A
 CLIP_WINDOW_TILEMAP_NR1B    equ $1B
 CLIP_WINDOW_CTRL_NR1C       equ $1C
+RASTER_LINE_MSB_NR1E        equ $1E
 RASTER_INT_CTRL_NR22        equ $22
 ULA_OFS_X_NR26              equ $26
 ULA_OFS_Y_NR27              equ $27
@@ -498,8 +498,9 @@ drawPixelStrip_L2rot:
         and     $0F                 ; bank number 0..15 (per 32 pixel strips, per 8kiB)
         add     a,LAYER2_BANK*2+1   ; add extra +1 to do shift bar +32px to right (centers it)
         nextreg MMU7_NR57,a         ; map the very bottom of Layer2 to E000..FFFF
-        ; finalize address in DE, draw two pixels at [x+32,254] and [x+32,255]
-        ld      e,$FE               ; Y=254
+        ; finalize address in DE, draw two pixels at [x+32,BIGL2BARPOSY] and [x+32,BIGL2BARPOSY+1]
+        ld      a,(nexHeader.BIGL2BARPOSY)
+        ld      e,a                 ; Y pos from header
         ld      a,(nexHeader.LOADBARCOL)
         ld      (de),a
         inc     e                   ; +1 = pixel below
@@ -685,20 +686,13 @@ LoadScr_finish:
         ret
 
 LoadScr_showTiles:
-    ; palette block is mandatory for tile mode screen, the last 4B are init data!
-    ; so only 254 colours are legit, last 4B are next regs: $6B, $6C, $6E, $6F
-        ld      hl,innerBuffer+254*2
-        ld      a,(hl)
-        inc     hl
+        ld      a,(nexHeader.TILESCRCONFIG+0)
         nextreg TILEMAP_CTRL_NR6B,a
-        ld      a,(hl)
-        inc     hl
+        ld      a,(nexHeader.TILESCRCONFIG+1)
         nextreg TILEMAP_DEFAULT_ATTR_NR6C,a
-        ld      a,(hl)
-        inc     hl
+        ld      a,(nexHeader.TILESCRCONFIG+2)
         nextreg TILEMAP_BASE_ADR_NR6E,a
-        ld      a,(hl)
-        inc     hl
+        ld      a,(nexHeader.TILESCRCONFIG+3)
         nextreg TILEMAP_GFX_ADR_NR6F,a
         jr      LoadScr_finish
 
@@ -734,19 +728,16 @@ LoadFilePalette:
         ld      hl,innerBuffer
         ld      bc,$200
         call    fread
+        nextreg PALETTE_CONTROL_NR43,%0'011'000'0   ; NR43=Tilemap first palette
+        ld      a,(nexHeader.LOADSCR2)
+        cp      NEXLOAD_LOADSCR2_TILEMODE
+        jr      z,.setPalette               ; Tilemap screen
         nextreg PALETTE_CONTROL_NR43,%0'001'000'0   ; NR43=Layer2 first palette
+        or      a
+        jr      nz,.setPalette              ; Layer2 320x256 or 640x256
         ld      a,(nexHeader.LOADSCR)
         test    NEXLOAD_LOADSCR_LAYER2
         jr      nz,.setPalette              ; In case Layer2 screen is loaded (or L2+LoRes)
-        ; check new V1.3 modes in second field of header
-        test    NEXLOAD_LOADSCR_EXT2
-        jr      z,.setUlaPalette            ; this is LoRes screen (not a new V1.3 mode)
-        ld      a,(nexHeader.LOADSCR2)
-        cp      NEXLOAD_LOADSCR2_TILEMODE
-        jr      nz,.setPalette              ; Layer2 320x256 or 640x256
-        nextreg PALETTE_CONTROL_NR43,%0'011'000'0   ; NR43=Tilemap first palette
-        jr      .setPalette
-.setUlaPalette:
         nextreg PALETTE_CONTROL_NR43,0      ; NR43=ULA first palette (LoRes mode)
         ; LoRes palette is set only if Layer2 screen is not in the file (L2+LoRes=fail)
 .setPalette:
@@ -839,13 +830,10 @@ setupBeforeBlockLoading:
         ;; reset palettes
         ; ULA classic palette
         nextreg PALETTE_INDEX_NR40,0
-        ld      b,16
-.resetUlaPalLoop:
-        push    bc
-        ld      hl,ulaClassicPalette
-        call    SetNextRegistersByData
-        pop     bc
-        djnz    .resetUlaPalLoop
+        call    .resetUlaClassicPalette
+        ; set ULA classic palette also to tiles palette
+        nextreg PALETTE_CONTROL_NR43,$30    ; NR43=Tilemode first palette, NR40 is wrapped at 0
+        call    .resetUlaClassicPalette
 
         ; Layer2 + Sprites palette + exit
         nextreg PALETTE_CONTROL_NR43,$10    ; NR43=Layer2 first palette, NR40 is wrapped at 0
@@ -857,6 +845,15 @@ setupBeforeBlockLoading:
         inc     a
         jr      nz,.resetSequentialPalLoop
         nextreg PALETTE_CONTROL_NR43,a      ; NR43=ULA first palette, NR40 is wrapped at 0
+        ret
+.resetUlaClassicPalette:
+        ld      b,16
+.resetUlaPalLoop:
+        push    bc
+        ld      hl,ulaClassicPalette
+        call    SetNextRegistersByData
+        pop     bc
+        djnz    .resetUlaPalLoop
         ret
 
 ;-------------------------------
@@ -1042,10 +1039,18 @@ bankLoadDelay:
         ld      a,(nexHeader.LOADDELAY)
 .delayL or      a
         ret     z
-        ei
+        ; scanline based frame delay (not allowing IM1 to damage bank 5 data)
+        push    af
+.scanlineWaitForMsb0:
+        NEXTREG2A   RASTER_LINE_MSB_NR1E
+        rra
+        jr      c,.scanlineWaitForMsb0
+.scanlineWaitForMsb1:
+        NEXTREG2A   RASTER_LINE_MSB_NR1E
+        rra
+        jr      nc,.scanlineWaitForMsb1
+        pop     af
         dec     a
-        halt
-        di
         jr      .delayL
 
 ;-------------------------------
@@ -1250,10 +1255,10 @@ testStart
 ;         CSP_BREAK
         jp      $2000
 ; screen-loader and basic functions test
-testFakeName0   DZ  "\"s p a c e.nex\""
+testFakeName0   DZ  "t320x256.nex"
 ;  coreVersion.nex   loaderVersion.nex    \"s p a c e.nex\"  tmHiRes.nex   tmLoResNoPal.nex   tmNoStart.nex
 ;  empty.nex         preserveNextRegs.nex   tmHiCol.nex      tmLoRes.nex   tmNoPic.nex        tmUla.nex
-;  t320x256.nex      t640x256.nex
+;  t320x256.nex      t640x256.nex           t320x256NP.nex  t640x256NP.nex tilescreenNP.nex   tilescreen.nex
 ; name parsing test
 testFakeName1   DB  "   \"Warhawk.nex\" "
 testFakeName2   DB  "  NXtel.nex:"          ; leading space, colon
