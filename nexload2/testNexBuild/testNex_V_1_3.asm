@@ -20,7 +20,7 @@ ii = ii+1
     END ; palette EDIT
 */
 
-; simple test to create V1.3 files
+; simple test to create V1.3 files with sjasmplus
 
     OPT --syntax=abf
     DEVICE ZXSPECTRUMNEXT
@@ -90,6 +90,7 @@ im2Handler:
     ret
 
     ORG $9000   ; copper CODE
+CopperCode:
     MACRO   CNOP
         DW  0
     ENDM
@@ -251,16 +252,22 @@ MMpic_6F    EQU     $4A
     SAVENEX OPEN "test_1.3.nex", start, $8FF0, 20, 3
     SAVENEX CORE 3,0,6
     SAVENEX CFG 0, 0, 0, 0
+    SAVENEX CFG3 1, 0, $E000, 2048
     SAVENEX BAR 1, 20, 200, 100
 ;     SAVENEX BAR 1, 20, 20, 10
 
+
+    SAVENEX COPPER $$CopperCode, CopperCode & $1FFF
+    SAVENEX PALETTE MEM $$MMpicPal, MMpicPal & $1FFF
+
+TARGETMODE  EQU     0       ; 256x192x8
+    SAVENEX SCREEN TILE MMpic_6B, MMpic_6C, MMpic_6E, MMpic_6F, 0
+
 ; TARGETMODE  EQU     $10     ; 320x256x8
-TARGETMODE  EQU     $20     ; 640x256x4
-
-    SAVENEX SCREEN BMP "airplane.bmp", 1, 0
-
 ;     SAVENEX SCREEN BMP "bg320x256.bmp", 1, 0
-;     SAVENEX SCREEN BMP "bg640x256.bmp", 1, 0
-    SAVENEX COPPER 4, $1000
+
+; TARGETMODE  EQU     $20     ; 640x256x4
+;     SAVENEX SCREEN BMP "airplane.bmp", 1, 0
+
     SAVENEX BANK 5, 2, 0, 20
     SAVENEX CLOSE
