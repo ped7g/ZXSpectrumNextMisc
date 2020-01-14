@@ -13,6 +13,6 @@ FROM gcc:6
 RUN git clone --depth=1 --branch v1.14.4 https://github.com/ped7g/sjasmplus.git \
     && cd sjasmplus \
     && make clean \
-    && make \
+    && make -j4 \
     && make install \
     && make clean
