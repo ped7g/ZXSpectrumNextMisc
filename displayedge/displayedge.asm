@@ -107,18 +107,28 @@ asciiart: swap left/right side, the table is on right side, controls on left
     DEFINE TILE_GFX_ADR     $4A00           ; 128*32 = 4096
                                             ; = 6656 $1A00 -> fits into ULA classic VRAM
 
+    STRUCT S_MARGINS        ; pixels of margin 0..31 (-1 = undefined margin)
+L           BYTE    -1      ; left
+R           BYTE    -1      ; right
+T           BYTE    -1      ; top
+B           BYTE    -1      ; bottom
+    ENDS
+
+    STRUCT S_UI_DEFINITIONS
+labelDot    WORD    0       ; address where to write display dot
+cellAdr     WORD    0       ; address of big table cell on screen at [1,0] char inside
+nextMode    BYTE    0
+    ENDS
+
     STRUCT S_MODE_EDGES
-        ; main values
-left        BYTE    0
-right       BYTE    0
-top         BYTE    0
-bottom      BYTE    0
-        ; original values (from file), if 255, then this mode is new (not in file)
-oLeft       BYTE    -1
-oRight      BYTE    -1
-oTop        BYTE    -1
-oBottom     BYTE    -1
+        ; current margins values (must be first four bytes of the structure)
+cur         S_MARGINS
+        ; original values (from file)
+orig        S_MARGINS
+        ; UI related config
+ui          S_UI_DEFINITIONS
         ; internal flags and intermediate values
+modified    BYTE    0       ; if this mode was modified in some way
 leftT       BYTE    0       ; full tiles left
 rightT      BYTE    0       ; full tiles right
 midT        BYTE    0       ; amount of semi top/bottom tiles (w/o left/right corner tiles)
@@ -133,6 +143,25 @@ maskTopB    BYTE    0
 maskBottomG BYTE    0
 maskBottomB BYTE    0
     ENDS
+
+    STRUCT S_STATE
+timingIsUnlocked    BYTE    0
+edge                BYTE    0   ; 0 left, 1 top, 2 right, 3 bottom (to align with chars)
+lastCtrlKey         BYTE    0   ; save/reload/quit/hz/timing when waiting for confirm
+debounceKey         BYTE    0
+modified            BYTE    0   ; set if any of modes (even inactive) is modified
+noFileFound         BYTE    0
+    ENDS
+
+KEY_DEBOUNCE_WAIT   EQU     8
+
+CHAR_DOT_RED        EQU     25
+CHAR_DOT_YELLOW     EQU     26
+CHAR_DOT_GREEN      EQU     27
+CHAR_ARROW_L        EQU     28
+CHAR_ARROW_T        EQU     29
+CHAR_ARROW_R        EQU     30
+CHAR_ARROW_B        EQU     31
 
 ;; some further constants, mostly machine/API related
     INCLUDE "constants.i.asm"
@@ -177,9 +206,15 @@ start:
         nextreg MMU2_4000_NR_52,5*2
         nextreg MMU3_6000_NR_53,5*2+1
 
-    ;; copy the font data to Bank 5 VRAM (also to create buffer to parse .cfg file)
+    ;; copy the font data to Bank 5 VRAM (= release memory for buffer to parse .cfg file)
+        ; clear first 24 characters which are not part of the font
+        ld      hl,TILE_GFX_ADR
+        ld      de,TILE_GFX_ADR+1
+        ld      bc,24*32-1
+        ld      (hl),l
+        ldir
+        ; copy the font data for chars 24..127
         ld      hl,tilemapFont_char24
-        ld      de,TILE_GFX_ADR + 24*32
         ld      bc,(128-24)*32
         ldir
 
@@ -231,50 +266,383 @@ start:
 
     ;; enter the interactive loop (make sure the screen will get full refresh)
     ; FIXME all
-        ; if mode did change (or tainted by first time) - redraw everything
-        ; listen to keys, redraw edge and control graphics
         ; when "save" is requested, parse the old cfg file and overwrite/add new data:
         ; - probably rename old to backup, open for read, open for write new cfg, copy
         ; - all comment lines, write modified lines instead of old values where needed
         ; - add new modes after the other block, close the files
         ; - (delete old backup before first step)
+
+MainLoop:
+    ; check if whole video mode did change
+        call    DidVideoModeChange
+        jr      z,.noModeChange
+    ; calculate EdgesData address for new mode
+        ld      e,a
+        ld      d,S_MODE_EDGES
+        mul     de
+        add     de,EdgesData
+        push    de
+        pop     ix
+    ; sanitize current margin values (if new or invalid from file)
+        call    SanitizeCurMarginValues
+    ; redraw full screen
+        ; redraw full screen and default texts + table
+        call    RedrawMainMap
+        ; redraw the edge area itself
+        call    RedrawEdge
+        ; mark current mode as active
+        ld      hl,(ix+S_MODE_EDGES.ui.labelDot)    ; fake
+        ld      (hl),CHAR_DOT_RED
+        ld      hl,(ix+S_MODE_EDGES.ui.cellAdr)     ; fake
+        add     hl,2*80+16
+        ld      (hl),CHAR_DOT_RED
+        ; mark 50/60Hz label as active
+        ld      a,(DidVideoModeChange.oM)
+        ld      hl,Label50HzAdr-1
+        and     4
+        jr      z,.modeIs50Hz
+        ld      hl,Label60HzAdr-1
+.modeIs50Hz:
+        ld      (hl),CHAR_DOT_RED
+        ; show if the timing is locked
+        ld      a,(DidVideoModeChange.oM)
+        and     ~4
+        ld      (state.timingIsUnlocked),a  ; non zero value for anything except HDMI50
+        jr      z,.hdmiIsLockedAnyWay   ; HDMI vs VGA can be modified only in config mode
+        NEXTREG2A   MACHINE_TYPE_NR_03
+        and     $08                     ; check if user lock bit is set
+        jr      z,.displayTimingIsUnlocked
+        xor     a
+        ld      (state.timingIsUnlocked),a  ; clear unlocked flag
+.hdmiIsLockedAnyWay:
+        ld      hl,LockedTxt
+        ld      de,(ix+S_MODE_EDGES.ui.labelDot)    ; fake
+        add     de,80
+        call    DrawHlStringAtDe
+.displayTimingIsUnlocked:
+        call    RedrawAllTableData
+
+.noModeChange:
+        call    RedrawUiControls
+        ei
+        halt
+        call    HandleControls
+        jr      MainLoop
+
+;-------------------------------
+HandleControls:
+    ; count down debounce wait
+        ld      a,(state.debounceKey)
+        sub     1
+        adc     a,0
+        ld      (state.debounceKey),a
+        ret     nz
+    ; check if the confirmation prompt is being displayed, check for Y/other key then
+        ld      a,(state.lastCtrlKey)
+        or      a
+        jr      nz,.ConfirmationPromptHandler
+    ; check for regular control keys
+        ; O,P select edge to edit (CCWS/CWS)
+        ld      a,~(1<<5)           ; sixth row YUIOP
+        in      a,(254)
+        cpl
+        and     3
+        jr      nz,.edgeSelector    ; A=%10 for "O", %01 for "P" (or %11 for both)
+        ; HJKL to adjust edge size
+        ld      a,~(1<<6)           ; seventh row HJKLenter
+        in      a,(254)
+        cpl
+        and     $1E
+        jr      nz,.edgeAdjusting
+        ; Q/R (and read T)
+        ld      a,~(1<<2)           ; third row QWERT
+        in      a,(254)
+        ld      b,1
+        rra
+        jr      nc,.menuControlPressed  ; Q pressed
+        inc     b
+        rra
+        rra
+        rra
+        jr      nc,.menuControlPressed  ; R pressed
+        ld      c,a ; preserve "T" key for later
+        ld      a,~(1<<1)           ; second row ASDFG
+        in      a,(254)
+        inc     b
+        rra
+        rra
+        jr      nc,.menuControlPressed  ; S pressed
+        inc     b
+        rra
+        rra
+        jr      nc,.menuControlPressed  ; F pressed
+        ; ignore "T" key presses when video mode timing is locked
+        ld      a,(state.timingIsUnlocked)
+        or      a
+        ret     z
+        inc     b
+        rr      c
+        ret     c
+        ; T pressed
+.menuControlPressed:
+    ; B = key control; order of controls is QRSFT (B=1,2,3,4,5)
+        ld      a,(state.modified)
+        or      a
+        ld      a,b
+        jr      nz,.needsAlwaysConfirm  ; file modified -> everything needs confirmation
+        cp      3
+        ; quit and reload will happen instantly when nothing is modified
+        jr      c,.YwasPressed
+.needsAlwaysConfirm:
+        ld      (state.lastCtrlKey),a
+        ;  |
+        ; fallthrough to .setDebounce
+        ;  |
+.setDebounce:
+        ld      a,KEY_DEBOUNCE_WAIT
+        ld      (state.debounceKey),a   ; set debounce wait before reading keyboard again
+        ret
+
+.edgeSelector:
+        and     2       ; 2 for O/O+P, 0 for P
+        inc     a       ; 3 for O/O+P, 1 for P (technically 3 is like -1)
+        ld      hl,state.edge
+        add     a,(hl)
+        and     3
+        ld      (hl),a
+        jr      .setDebounce
+
+.edgeAdjusting:
+        ld      de,EdgeAdjustConstantsTable-2
+.findAdjustConstant:
+        inc     de
+        rra
+        jr      nc,.findAdjustConstant  ; H J K L enter (i.e. L is de+2, J is de+4, etc)
+        call    CurrentEdgeValueAdrToHl
+        ld      a,(de)                  ; adjustement constant (-8, -1, +1, +8)
+        add     a,(hl)
+        ld      (hl),a
+        call    SanitizeCurMarginValues
+        call    RedrawEdge
+        jr      .setDebounce
+
+.ConfirmationPromptHandler:
+        ld      b,a     ; which control is waiting for confirm
+    ; wait for any key press
+        xor     a       ; all rows of keys
+        in      a,(254)
+        cpl             ; pressed key "0" -> "1"
+        and     $1F
+        ret     z
+    ; some key was pressed, check if it was "Y"
+        call    .setDebounce
+        xor     a
+        ld      (state.lastCtrlKey),a   ; clears last ctrl (will be handled here)
+        ld      a,~(1<<5)
+        in      a,(254)
+        and     $10     ; key Y
+        ret     nz                      ; something else pressed, just redraw UI
+.YwasPressed:
+        djnz    .notQuitPending
+    ; Quit confirmed
+/*
         ; when "quit" is requested, restore tilemap mode to previous values and do
         ; classic ULA CLS (shouldn't hurt even if the user was in different mode)
         ; and return.
-
-        call    RedrawMainMap
-
-debugLoop1:
-        ld      ix,debugEdges   ;;DEBUG
-        call    RedrawEdge
-
-        ; DEBUG HALT
-        ei
-        halt
-        ld      a,(debugEdges.left)
-        inc     a
-        and     31
-        ld      (debugEdges.left),a
-        ld      (debugEdges.right),a
-        ld      (debugEdges.top),a
-        ld      (debugEdges.bottom),a
-
-; debugWaitForKey:
-;         xor     a
-;         in      a,(254)
-;         rra
-;         jr      c,debugWaitForKey
-        .2 halt
-        jr      debugLoop1
-
+*/
+        ;FIXME all
     ;; return to NextZXOS with "no error"
     ; - CF=0 when exiting (CF=1 A=esx_err, CF=1, A=0, HL="dc" custom error string)
+        pop     bc          ; remove return address to main loop (to return to NextZXOS)
         xor     a
         ret
 
-debugEdges:  S_MODE_EDGES {15, 15, 15, 15}
+.notQuitPending:
+        djnz    .notReloadPending
+    ; Reload confirmed
+        ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
+        ld      (LabelQuitAdr + 1*80 - 1),a
+        .3 halt
+        ;FIXME all
+        jr      .setDebounce            ; when called without confirm step, needs this
+
+.notReloadPending:
+        djnz    .notSavePending
+    ; Save confirmed
+        ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
+        ld      (LabelQuitAdr + 2*80 - 1),a
+        .3 halt
+        ;FIXME all
+        ret
+
+.notSavePending:
+        djnz    .notFreqPending
+    ; Frequency confirmed
+        ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
+        ld      (LabelQuitAdr + 3*80 - 1),a
+        .3 halt
+        ; flip the 50/60Hz bit
+        NEXTREG2A PERIPHERAL_1_NR_05
+        xor     %00'00'0'1'0'0
+        nextreg PERIPHERAL_1_NR_05,a
+        ret
+
+.notFreqPending:
+    ; Timing change confirmed
+        ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
+        ld      (LabelQuitAdr + 4*80 - 1),a
+        .3 halt
+        NEXTREG2A MACHINE_TYPE_NR_03
+        and     $0F
+        or      (ix + S_MODE_EDGES.ui.nextMode)
+        nextreg MACHINE_TYPE_NR_03,a
+        ret
 
 ;-------------------------------
+EdgeAdjustConstantsTable:
+        DB      +8, +1, -1, -8
+
+EdgesData:
+; .hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
+.hdmi_50    S_MODE_EDGES    {{14,15,16,17},{14,15,16,17},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
+.z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0 }}
+.z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0 }}
+.z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0 }}
+.hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00 }}
+.z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0 }}
+; .z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0 }}
+; .z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
+.z128_60    S_MODE_EDGES    {{1,2,3,4},{1,2,3,4},{ $4000+16*80+23, $4000+15*80+54, $B0 }}  ; DEBUG
+.z128p3_60  S_MODE_EDGES    {{1,2,3,4},{1,2,3,4},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
+.pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90 }}
+
+state:      S_STATE     {0, 0, 0}
+
+;-------------------------------
+; "runtime" functions are in separate asm file so they can be easily included
+; in other projects
+    DEFINE USE_TO_READ_NEXT_REG @readNextReg2A
+
+    INCLUDE "displayedge_rt.i.asm"
+
+;-------------------------------
+DidVideoModeChange:
+; returns ZF=1 when no change happened, ZF=0 when changed
+        call    dspedge.DetectMode  ; A = 0..8 current mode number
+.oM=$+1 cp      dspedge.MODE_COUNT
+        ret     z
+        ld      (.oM),a
+        ret
+
+;-------------------------------
+SanitizeCurMarginValues:
+        push    ix
+        pop     hl
+        ; the current margin values must be first four bytes in the structure
+        ld      b,4
+.sanitizeLoop:
+        ld      a,(hl)
+        and     -32
+        jr      z,.valueOk
+        ; value was 32..255 .. the 32..127 will become 31, 128..255 will become 0
+        ld      a,31
+        jp      p,.writeValue
+        xor     a
+.writeValue:
+        ld      (hl),a
+.valueOk:
+        inc     hl
+        djnz    .sanitizeLoop
+        ret
+
+;-------------------------------
+CurrentEdgeValueAdrToHl:
+        push    af
+        ld      a,(state.edge)  ; 0 1 2 3 -> 0 2 1 3 (from edge direction to edge offset)
+        add     a,$7E           ; move b1 to b7
+        rlca
+        and     3               ; result = b0 <-> b1 swap positions
+        push    ix
+        pop     hl
+        add     hl,a            ; address of current value in edge
+        pop     af
+        ret
+
+;-------------------------------
+RedrawUiControls:
+    ; refresh the global "modified" flag based on modified flags of all modes
+        ld      hl,EdgesData + S_MODE_EDGES.modified
+        ld      b,dspedge.MODE_COUNT
+        xor     a
+.refreshModified:
+        or      (hl)
+        add     hl,S_MODE_EDGES
+        djnz    .refreshModified
+        ld      (state.modified),a
+    ; update file status flag
+        ld      hl,FileStatusModTxt
+        or      a
+        jr      nz,.drawFileStatus
+        ld      hl,FileStatusNewTxt
+        ld      a,(state.noFileFound)
+        dec     a
+        jr      z,.drawFileStatus
+        ld      hl,FileStatusOkTxt
+.drawFileStatus:
+        ld      de,FileStatusAdr
+        call    DrawHlStringAtDe
+    ; add "Timing" menu item, when mode is unlocked
+        ld      b,4
+        ld      a,(state.timingIsUnlocked)
+        or      a
+        jr      z,.TimingIsLocked
+        ld      hl,TimingLegendTxt
+        call    DrawStringWithAddressData
+        ld      b,5
+.TimingIsLocked:
+        ; B = number of main menu items (quit/save/...) (4 or 5, the +1 is timing)
+    ; draw the green dots/confirm message depending on the internal status of controls
+        ld      hl,LabelQuitAdr-1
+        ld      a,(state.lastCtrlKey)
+        ld      c,a
+        or      a
+        ld      a,CHAR_DOT_GREEN
+        ld      de,ConfirmLegendTxtOff  ; zero CtrlKey, hide confirmation prompt
+        jr      z,.MainKeysAvailable
+        ld      a,' '
+        ld      de,ConfirmLegendTxtOn   ; non-zero CtrlKey, requesting confirmation
+.MainKeysAvailable:
+        ld      (hl),a
+        add     hl,80
+        djnz    .MainKeysAvailable
+        ; display/hide confirmation prompt
+        ex      de,hl
+        call    DrawStringsWithAddressData
+        ; mark the active Ctrl when confirm prompt is displayed
+        ld      e,c
+        ld      d,80
+        dec     e
+        jp      m,.noConfirmPrompt
+        mul     de
+        add     de,LabelQuitAdr-1
+        ex      de,hl
+        ld      (hl),CHAR_DOT_RED
+.noConfirmPrompt:
+    ; draw the edge type between "O ... P" controls
+        ld      a,(state.edge)
+        swapnib
+        srl     a               ;   A = edge*8
+        ld      hl,EdgeLegendTxt
+        add     hl,a
+        ld      de,LabelEdgeAdr
+        call    DrawHlStringAtDe
+    ; draw the current edge value above "HJKL" controls
+        call    CurrentEdgeValueAdrToHl
+        ld      a,(hl)
+        ld      de,EdgeValueAdr
+        call    DrawAdecAtDe
+    ; redraw active table item
+        jp      RedrawAllTableData.RedrawCell
 
 ;-------------------------------
 RedrawEdge:
@@ -304,10 +672,10 @@ RedrawEdge:
         push    ix
         pop     de
         add     de,S_MODE_EDGES.maskLeftG   ; DE = ix+S_MODE_EDGES.maskLeftG
-        LdiTwoValuesFromTableByAnd  RedrawTileMasksLeft,    (ix+S_MODE_EDGES.left),     3
-        LdiTwoValuesFromTableByAnd  RedrawTileMasksRight,   (ix+S_MODE_EDGES.right),    3
-        LdiTwoValuesFromTableByAnd  RedrawTileMasksTop,     (ix+S_MODE_EDGES.top),      7
-        LdiTwoValuesFromTableByAnd  RedrawTileMasksBottom,  (ix+S_MODE_EDGES.bottom),   7
+        LdiTwoValuesFromTableByAnd  RedrawTileMasksLeft,    (ix+S_MODE_EDGES.cur.L),    3
+        LdiTwoValuesFromTableByAnd  RedrawTileMasksRight,   (ix+S_MODE_EDGES.cur.R),    3
+        LdiTwoValuesFromTableByAnd  RedrawTileMasksTop,     (ix+S_MODE_EDGES.cur.T),    7
+        LdiTwoValuesFromTableByAnd  RedrawTileMasksBottom,  (ix+S_MODE_EDGES.cur.B),    7
 
     ; now further patch the actual tiles gfx with these bit-masks which pixel to draw
         ; two masks to cover vertical/horizontal pixels 0 = keep stripes, 1 = draw pixel
@@ -362,12 +730,12 @@ RedrawEdge:
     ;; now redraw the tile map in the border area
 
     ; calculate left/middle/right tiles numbers for side-rows
-        ld      a,(ix+S_MODE_EDGES.left)
+        ld      a,(ix+S_MODE_EDGES.cur.L)
         srl     a
         srl     a
         ld      (ix+S_MODE_EDGES.leftT),a       ; pixels/4
         ld      b,a
-        ld      a,(ix+S_MODE_EDGES.right)
+        ld      a,(ix+S_MODE_EDGES.cur.R)
         srl     a
         srl     a
         ld      (ix+S_MODE_EDGES.rightT),a      ; pixels/4
@@ -378,7 +746,7 @@ RedrawEdge:
     ; fill the full-tile chars at top and the top edge of green frame
         ld      c,$18           ; full tile char
         ld      hl,$4000
-        ld      a,(ix+S_MODE_EDGES.top)
+        ld      a,(ix+S_MODE_EDGES.cur.T)
         call    FillFullBorderRows
         ; HL = address to draw top semi-edge
         ld      de,$1016
@@ -423,7 +791,7 @@ RedrawEdge:
         jr      nz,.drawSideRowsLoop
     ; draw the clearing bottom part
         ld      a,23
-        sub     (ix+S_MODE_EDGES.bottom)    ; CF=1 for 24..31 pixels (no clearing row)
+        sub     (ix+S_MODE_EDGES.cur.B)     ; CF=1 for 24..31 pixels (no clearing row)
         jr      .clearingBottomRowEntry
 .clearingBottomRow:
         ld      de,$1220        ; E=' '
@@ -434,7 +802,7 @@ RedrawEdge:
     ; draw the bottom part of frame, fill remaining bottom and exit
         ld      de,$1417
         call    FillDetailedRow
-        ld      a,(ix+S_MODE_EDGES.bottom)
+        ld      a,(ix+S_MODE_EDGES.cur.B)
         ;  |
         ; fallthrough to FillFullBorderRows
         ;  |
@@ -550,14 +918,14 @@ DrawStringWithAddressData:
         inc     hl
         bit     6,d
         ret     z       ; DE was not $4xxx address, exit with ZF=1
-.stringLoop:
+DrawHlStringAtDe:
         ld      a,(hl)
         and     $7F
         ld      (de),a
         inc     de
         bit     7,(hl)
         inc     hl
-        jr      z,.stringLoop
+        jr      z,DrawHlStringAtDe
         ret
 
 DrawTableGridHorizontalLine:
@@ -584,10 +952,102 @@ DrawTableGridVerticalLine:
         djnz    .loop
         ret
 
+DrawAdecAtDe:
+    ; DE = target address, A = decimal value 0..99 (or "--" is printed)
+        cp      100
+        jr      nc,.invalidValue    ; 100..255 shows as "--"
+        ex      de,hl
+        ld      (hl),' '
+        sub     10
+        jr      c,.tensDone
+        ld      (hl),'0'
+.tensLoop:
+        inc     (hl)
+        sub     10
+        jr      nc,.tensLoop
+.tensDone:
+        inc     hl
+        add     a,10+'0'
+        ld      (hl),a
+        inc     hl
+        ex      de,hl
+        ret
+.invalidValue:
+        ld      a,'-'
+        ld      (de),a
+        inc     de
+        ld      (de),a
+        inc     de
+        ret
+
+;-------------------------------
+; redraw all table cells
+RedrawAllTableData:
+        push    ix      ; preserve the active mode pointer
+        ld      ix,EdgesData
+        ld      b,dspedge.MODE_COUNT
+.loopModes:
+        push    bc
+        call    .RedrawCell
+        ld      bc,S_MODE_EDGES
+        add     ix,bc
+        pop     bc
+        djnz    .loopModes
+        pop     ix
+        ret
+.drawAdecAtDeAndRememberChange:
+        jr      z,DrawAdecAtDe
+        ld      b,1
+        ld      (ix+S_MODE_EDGES.modified),b
+        jr      DrawAdecAtDe
+.RedrawCell:
+        ld      (ix+S_MODE_EDGES.modified),0
+        ld      b,2
+        ld      de,(ix+S_MODE_EDGES.ui.cellAdr)     ; fake
+        add     de,7
+        ld      a,(ix+S_MODE_EDGES.cur.T)
+        cp      (ix+S_MODE_EDGES.orig.T)
+        call    .drawAdecAtDeAndRememberChange
+        add     de,80-2-7
+        ld      a,(ix+S_MODE_EDGES.cur.L)
+        cp      (ix+S_MODE_EDGES.orig.L)
+        call    .drawAdecAtDeAndRememberChange
+        add     de,-2+14
+        ld      a,(ix+S_MODE_EDGES.cur.R)
+        cp      (ix+S_MODE_EDGES.orig.R)
+        call    .drawAdecAtDeAndRememberChange
+        add     de,80-2-14+7
+        ld      a,(ix+S_MODE_EDGES.cur.B)
+        cp      (ix+S_MODE_EDGES.orig.B)
+        call    .drawAdecAtDeAndRememberChange
+        ; if no value is modified, draw either empty spaces (clear) or "not in cfg"
+        add     de,-80-2-7+3
+        ld      hl,NotInCfgTxt
+        ld      a,(ix+S_MODE_EDGES.cur.L)
+        inc     a
+        jr      z,.notInCfg
+        ld      hl,ClearModeStatusTxt
+.notInCfg:
+        djnz    .notModified
+        ; if any value differs, draw "*modified*" message
+        ld      hl,ModeModifiedTxt
+.notModified:
+        jp      DrawHlStringAtDe
+
+;-------------------------------
+; UI data
+
+Label50HzAdr:   EQU     $4000 + 5*80 + 21 + 20
+Label60HzAdr:   EQU     $4000 + 5*80 + 21 + 39
+LabelQuitAdr:   EQU     $4000 + 15*80 + 10
+LabelEdgeAdr:   EQU     $4000 + 9*80 + 11
+EdgeValueAdr:   EQU     $4000 + 11*80 + 14
+FileStatusAdr:  EQU     $4000 + 26*80 + 19-4
+
 FixedLegendText:
-        DW      $4000 + 5*80 + 21 + 20
+        DW      Label50HzAdr
         DC      "50 Hz"
-        DW      $4000 + 5*80 + 21 + 39
+        DW      Label60HzAdr
         DC      "60 Hz"
         DW      $4000 + 8*80 + 24
         DC      "HDMI"
@@ -599,40 +1059,81 @@ FixedLegendText:
         DC      "ZX128+3"
         DW      $4000 + 24*80 + 24
         DC      "Pentagon"
+        DW      $4000 + 4*80 + 14
+        DB      "Make ",CHAR_DOT_GREEN,"green",CHAR_DOT_GREEN
+        DC      "       "
+        DW      $4000 + 5*80 + 14
+        DC      "edge visible"
         DW      $4000 + 7*80 + 10
-        DC      "Controls:"
+        DC      "controls:"
         DW      $4000 + 9*80 + 9
         DC      "O"
         DW      $4000 + 9*80 + 19
         DC      "P"
+        DW      EdgeValueAdr - 4
+        DB      CHAR_ARROW_L|128
+        DW      EdgeValueAdr + 5
+        DB      CHAR_ARROW_R|128
         DW      $4000 + 12*80 + 9
         DC      "-8 -1 +1 +8"
         DW      $4000 + 13*80 + 10
         DC      "H  J  K  L"
-        DW      $4000 + 15*80 + 10
-        DC      "S ave"
+        DW      LabelQuitAdr
+        DC      "Quit"
         DW      $4000 + 16*80 + 10
-        DC      "R eload"
+        DC      "Reload"
         DW      $4000 + 17*80 + 10
-        DC      "Q uit"
+        DC      "Save"
         DW      $4000 + 18*80 + 10
-        DC      "T iming"
-        DW      $4000 + 20*80 + 10
-        DC      "press"
-        DW      $4000 + 21*80 + 10
-        DC      "S/R/Q/T"
-        DW      $4000 + 22*80 + 10
-        DC      "twice to"
-        DW      $4000 + 23*80 + 10
-        DC      "confirm"
+        DC      "F 50/60Hz"
         DW      $4000 + 26*80 + 9
         DC      "file ["
         DW      $4000 + 26*80 + 19
         DC      "]"
         ;; DEBUG
         DW      $4000 + 27*80 + 9
-        DC      16,17,32,18,19,32,20,21,32,22,23,32,24,32,25,32,26,32,27,32,28,29,30,31," (debug)"
+        DC      16,17,32,18,19,32,20,21,32,22,23,32,24,32,25,32,26,32,27,32,28,29,30,31,32,0," (debug)"
         DW      0
+
+EdgeLegendTxt:
+        DC      CHAR_ARROW_L,"left   "
+        DC      CHAR_ARROW_T,"top    "
+        DC      CHAR_ARROW_R,"right  "
+        DC      CHAR_ARROW_B,"bottom "
+
+TimingLegendTxt:
+        DW      $4000 + 19*80 + 10
+        DC      "Timing"
+ConfirmLegendTxtOn:
+        DW      $4000 + 21*80 + 10
+        DB      "press ",CHAR_DOT_GREEN,"Y"|128
+        DW      $4000 + 22*80 + 10
+        DC      "to confirm"
+        DW      0
+ConfirmLegendTxtOff:
+        DW      $4000 + 21*80 + 10
+        DC      "        "
+        DW      $4000 + 22*80 + 10
+        DC      "          "
+        DW      0
+LockedTxt:
+        DC      "(locked)"
+
+; mode status texts (inside table cells)
+NotInCfgTxt:
+        DC      "not in cfg"
+ClearModeStatusTxt:
+        DC      "          "
+ModeModifiedTxt:
+        DB      CHAR_DOT_YELLOW, "modified", CHAR_DOT_YELLOW|128
+
+; file status texts: "*new","*mod","*ok "  (yellow dot for new+mod, green for ok)
+FileStatusNewTxt:
+        DC      CHAR_DOT_YELLOW,"new"
+FileStatusModTxt:
+        DC      CHAR_DOT_YELLOW,"mod"
+FileStatusOkTxt:
+        DC      CHAR_DOT_GREEN,"ok "
 
 ;-------------------------------
 ; PALETTE data for tilemode (full 9bit colors)
@@ -700,10 +1201,12 @@ customErrorToBasic: ; HL = message with |80 last char
 
 ;-------------------------------
 readNextReg2A:
+        push    bc
         ld      bc,TBBLUE_REGISTER_SELECT_P_243B
         out     (c),a
         inc     b
         in      a,(c)
+        pop     bc
         ret
 
 ;-------------------------------
@@ -813,7 +1316,9 @@ testStart
         ; setup fake argument and launch loader
         ld      hl,testFakeArgumentsLine
 ;         CSP_BREAK
-        jp      $2000
+        call    $2000       ; call to test the quit function
+        CSP_BREAK
+        ret
 
 testFakeArgumentsLine   DZ  " nothing yet ..."
 
