@@ -519,6 +519,16 @@ EdgesData:
 state:      S_STATE     {0, 0, 0}
 
 ;-------------------------------
+readNextReg2A:
+        push    bc
+        ld      bc,TBBLUE_REGISTER_SELECT_P_243B
+        out     (c),a
+        inc     b
+        in      a,(c)
+        pop     bc
+        ret
+
+;-------------------------------
 ; "runtime" functions are in separate asm file so they can be easily included
 ; in other projects
     DEFINE USE_TO_READ_NEXT_REG @readNextReg2A
@@ -899,6 +909,10 @@ RedrawMainMap:
         call    DrawTableGridVerticalLine
         ld      hl,$4000 + 4*80 + 21 + 12 + 19*2
         call    DrawTableGridVerticalLine
+        ; draw filename
+        ld      hl,dspedge.defaultCfgFileName
+        ld      de,FileNameAdr
+        call    DrawHlStringAtDe
         ; draw fixed legend text
         ld      hl,FixedLegendText
         ;  |
@@ -1043,6 +1057,7 @@ LabelQuitAdr:   EQU     $4000 + 15*80 + 10
 LabelEdgeAdr:   EQU     $4000 + 9*80 + 11
 EdgeValueAdr:   EQU     $4000 + 11*80 + 14
 FileStatusAdr:  EQU     $4000 + 26*80 + 19-4
+FileNameAdr:    EQU     $4000 + 27*80 + 9
 
 FixedLegendText:
         DW      Label50HzAdr
@@ -1090,9 +1105,8 @@ FixedLegendText:
         DC      "file ["
         DW      $4000 + 26*80 + 19
         DC      "]"
-        ;; DEBUG
-        DW      $4000 + 27*80 + 9
-        DC      16,17,32,18,19,32,20,21,32,22,23,32,24,32,25,32,26,32,27,32,28,29,30,31,32,0," (debug)"
+;         DW      FileNameAdr   ;;FIXME DEBUG
+;         DC      16,17,32,18,19,32,20,21,32,22,23,32,24,32,25,32,26,32,27,32,28,29,30,31,32,0," (debug)"
         DW      0
 
 EdgeLegendTxt:
@@ -1169,74 +1183,6 @@ tilemapFont_char24:
 
 ;-------------------------------
 ;;FIXME just the remnants of custom error message exit
-emptyLineFinish:                    ; here the stack is still old one (OS/BASIC)
-        call    cleanupBeforeBasic
-        ld      hl,0 ;txt_Usage        ; this fails to show anything in TESTING because ROM-mapping
-        call    printmsg            ; show usage info
-        ; simple `ret` is enough on real board, but continue with full returnToBasic
-        ; to make it work also in TESTING, where the ROM has to be mapped back
-returnToBasic:  ; cleanup as much as possible
-        ei
-        xor     a                   ; CF=0, A=0 (OK OK)
-.err:   nop                         ; place for 'scf' in case error path reuses this
-        ret
-
-;-------------------------------
-cleanupBeforeBasic:                 ; internal cleanup, before the need of old stack (must preserve HL)
-        ; map C000..FFFF region back to BASIC bank
-        ld      a,($5b5c)
-        and     7
-        ret
-
-V_1_3_BanksOffsetTestFailed:
-        call    prepareForErrorOutput
-        ld      hl,0 ; FIXME errTxt_BanksOffsetMismatch
-        jp      customErrorToBasic  ; will reset some things second time, but nevermind
-
-;-------------------------------
-customErrorToBasic: ; HL = message with |80 last char
-        ld      a,$37               ; nop -> scf in exit path
-        ld      (returnToBasic.err),a
-        jp      returnToBasic
-
-;-------------------------------
-readNextReg2A:
-        push    bc
-        ld      bc,TBBLUE_REGISTER_SELECT_P_243B
-        out     (c),a
-        inc     b
-        in      a,(c)
-        pop     bc
-        ret
-
-;-------------------------------
-bankLoadDelay:
-        ld      a,123
-.delayL or      a
-        ret     z
-        ; scanline based frame delay (not allowing IM1 to damage bank 5 data)
-        push    af
-.scanlineWaitForMsb0:
-        NEXTREG2A   RASTER_LINE_MSB_NR_1E
-        rra
-        jr      c,.scanlineWaitForMsb0
-.scanlineWaitForMsb1:
-        NEXTREG2A   RASTER_LINE_MSB_NR_1E
-        rra
-        jr      nc,.scanlineWaitForMsb1
-        pop     af
-        dec     a
-        jr      .delayL
-
-;-------------------------------
-printmsg:
-        ld      a,(hl)
-        inc     hl
-        and     a
-        ret     z                       ; exit if terminator
-        and     $7F                     ; clear 7th bit
-        rst     $10
-        jr      printmsg
 
 ;-------------------------------
 fclose: ret     ; this will be modified to NOP after fopen
@@ -1261,13 +1207,12 @@ fileError:                      ; esxDOS error code arrives in a
         ld      de,esxError
         ESXDOS  M_GETERR
         ld      hl,esxError
-        jp      customErrorToBasic
+;         jp      customErrorToBasic
 
 ;-------------------------------
 prepareForErrorOutput           ; do "CLS" of ULA screen with white paper ("error" case)
         nextreg MMU2_4000_NR_52,5*2   ; page-in the bank5 explicitly
         nextreg MMU3_6000_NR_53,5*2+1
-        call    cleanupBeforeBasic
         ld      a,7             ; "error" CLS
         jr      clsWithBordercol.withA
 
@@ -1292,7 +1237,6 @@ last:       ; after last machine code byte which should be part of the binary
     ;; reserved space for values (but not initialized, i.e. not part of the binary)
 nexFileVersion  db      0       ; BCD-packed ($13 for V1.3)
 esxError        ds      34
-filename        ds      100 ; FIXME remove: NEXLOAD_MAX_FNAME
 
 lastReserved:   ASSERT  lastReserved < $3D00
     ENDT        ;; end of DISP

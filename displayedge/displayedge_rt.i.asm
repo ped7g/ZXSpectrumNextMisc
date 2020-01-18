@@ -16,6 +16,9 @@
 ; # API (list of functions):
 ; DetectMode                   - returns dspedge.MODE_* value (current display mode)
 
+    ; switch sjasmplus to correct syntax variant
+    OPT push reset --zxnext --syntax=abfw
+
     MODULE dspedge
 
 MODE_HDMI_50        EQU         0
@@ -28,6 +31,13 @@ MODE_ZX128_60       EQU         6
 MODE_ZX128P3_60     EQU         7
 MODE_PENTAGON       EQU         8   ; the board ignores 50/60Hz bit for Pentagon timing
 MODE_COUNT          EQU         9
+
+    STRUCT S_MARGINS        ; pixels of margin 0..31 (-1 = undefined margin)
+L           BYTE    -1      ; left
+R           BYTE    -1      ; right
+T           BYTE    -1      ; top
+B           BYTE    -1      ; bottom
+    ENDS
 
     ; if no "USE_TO_READ_NEXT_REG" function was provided by source including this file, define own
     IFNDEF USE_TO_READ_NEXT_REG
@@ -89,4 +99,10 @@ DetectMode:
                 ld      a,MODE_PENTAGON
                 ret
 
+defaultCfgFileName:
+                DZ      "$/sys/displayedge.cfg"     ; zero terminated for esxDOS
+                DB      32|128          ; bit7 terminated for UI of .displayedge tool
+
     ENDMODULE
+
+    OPT pop     ; restore original configuration of sjasmplus syntax
