@@ -27,21 +27,13 @@
 ; v1    16/01/2020 P7G    Initial version
 ;
 ;-------------------------------
-; Example of CFG file (deduct format from the example please)
-/*
-; full comment line
-; the recognized video-mode names are: "hdmi", "zx48", "zx128", "zx128p3", "pentagon"
-; the video-mode name is then appended by Hz: "_50", "_60" (pentagon only with "_50")
-; the value is four decimal integers split by comma/space: left right top bottom of display
-; the values are number of pixels (in 320x256 resolution) not visible to user
-hdmi_50 = 1,2,3,4   ; one pixel on left side, two pixels on right, three at top, four at bottom
-zx48_60=1,2,3,4
-zx128_50 = 0, 0,  0, 0
-zx128p3_50 = 255,255,255,255    ; can have extra comment, but will be lost by tool save
-pentagon_60 = 0 0 8 16
-; other whole-commented lines or unknown identifiers will be fully preserved when tool is
-; storing new config (may get truncated when CFG is too big, expected size is under 3kB)
-*/
+; See example of CFG file in the file "test.cfg" in the project git repo. Syntax rules:
+;; full comment line starts with semicolon, only ASCII chars allowed, max line length 250
+;; otherwise (non-ASCII byte, longer line) parser may break and skip rest of file
+;; the recognized video-mode names: "hdmi", "zx48", "zx128", "zx128p3", "pentagon" (lowercase!)
+;; the video-mode name is then appended by Hz: "_50", "_60" (pentagon is without Hz part)
+;; the value is four decimal integers split by comma/space: left right top bottom of display
+;; the values are number of pixels (in 320x256 resolution) not visible to user
 ;-------------------------------
 /* screen layout design
 - tilemode 80x32 (640x256x4) without attribute byte = 2560 bytes map
@@ -106,6 +98,9 @@ asciiart: swap left/right side, the table is on right side, controls on left
     DEFINE TILE_MAP_ADR     $4000           ; 80*32 = 2560 (10*256)
     DEFINE TILE_GFX_ADR     $4A00           ; 128*32 = 4096
                                             ; = 6656 $1A00 -> fits into ULA classic VRAM
+
+;     DEFINE  CFG_FILENAME    dspedge.defaultCfgFileName
+    DEFINE  CFG_FILENAME    debugCfgName        ;FIXME DEBUG
 
     STRUCT S_MARGINS        ; pixels of margin 0..31 (-1 = undefined margin)
 L           BYTE    -1      ; left
@@ -218,9 +213,6 @@ start:
         ld      bc,(128-24)*32
         ldir
 
-    ;; read the current cfg file and parse the values, maybe remember which modes are stored
-    ; FIXME all
-
     ;; set Tilemode 80x32 (640x256x4)
         ; enter it in a way to make it possible to restore the original mode completely
         ; i.e. read old_$69 and do $69=0 (layer2 off, bank 5 ULA, no timex mode)
@@ -263,6 +255,9 @@ start:
         inc     hl
         nextreg PALETTE_VALUE_9BIT_NR_44,a
         djnz    .setPalLoop
+
+    ;; read the current cfg file and parse the values
+        call    ParseCfgFile
 
     ;; enter the interactive loop (make sure the screen will get full refresh)
     ; FIXME all
@@ -463,7 +458,7 @@ HandleControls:
         ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
         ld      (LabelQuitAdr + 1*80 - 1),a
         .3 halt
-        ;FIXME all
+        call    ParseCfgFile
         jr      .setDebounce            ; when called without confirm step, needs this
 
 .notReloadPending:
@@ -503,20 +498,21 @@ EdgeAdjustConstantsTable:
         DB      +8, +1, -1, -8
 
 EdgesData:
-; .hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
-.hdmi_50    S_MODE_EDGES    {{14,15,16,17},{14,15,16,17},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
+.hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
 .z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0 }}
 .z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0 }}
 .z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0 }}
 .hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00 }}
 .z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0 }}
-; .z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0 }}
-; .z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
-.z128_60    S_MODE_EDGES    {{1,2,3,4},{1,2,3,4},{ $4000+16*80+23, $4000+15*80+54, $B0 }}  ; DEBUG
-.z128p3_60  S_MODE_EDGES    {{1,2,3,4},{1,2,3,4},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
+.z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0 }}
+.z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
 .pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90 }}
 
 state:      S_STATE     {0, 0, 0}
+
+debugCfgName:
+        DZ      "test.cfg"
+        DB      32|128          ; bit7 terminated for UI of .displayedge tool
 
 ;-------------------------------
 readNextReg2A:
@@ -552,15 +548,9 @@ SanitizeCurMarginValues:
         ld      b,4
 .sanitizeLoop:
         ld      a,(hl)
-        and     -32
-        jr      z,.valueOk
-        ; value was 32..255 .. the 32..127 will become 31, 128..255 will become 0
-        ld      a,31
-        jp      p,.writeValue
-        xor     a
-.writeValue:
+        call    dspedge.SanitizeMarginValue
+        ; 32..127 will become 31, 128..255 will become 0
         ld      (hl),a
-.valueOk:
         inc     hl
         djnz    .sanitizeLoop
         ret
@@ -576,6 +566,33 @@ CurrentEdgeValueAdrToHl:
         pop     hl
         add     hl,a            ; address of current value in edge
         pop     af
+        ret
+
+;-------------------------------
+ParseCfgFile:
+    ; call the Cfg parser from runtime library
+        ld      hl,CFG_FILENAME
+        ld      de,ReadMarginsArray
+        ld      bc,ParsingBuffer
+        push    ix
+        call    dspedge.ParseCfgFile
+        pop     ix
+        sbc     a                       ; A = 0 when ok, $FF when error reported (+keeps CF)
+        ld      (state.noFileFound),a
+        ret     c                       ; parsing failed, don't do anything more
+    ; reset internal editor structures
+        ld      hl,ReadMarginsArray
+        ld      de,EdgesData
+        ld      bc,(dspedge.MODE_COUNT<<8) + $FF
+.copyParsedDataToEditStructs:
+        .4 ldi                          ; current values
+        add     hl,-4
+        .4 ldi                          ; original values (copy of the same)
+        add     de,S_MODE_EDGES - S_MODE_EDGES.ui   ; advance to next mode data
+        djnz    .copyParsedDataToEditStructs
+    ; force full screen redraw the hard way (by pretending the video mode did change)
+        ld      a,dspedge.MODE_COUNT
+        ld      (DidVideoModeChange.oM),a
         ret
 
 ;-------------------------------
@@ -595,8 +612,8 @@ RedrawUiControls:
         jr      nz,.drawFileStatus
         ld      hl,FileStatusNewTxt
         ld      a,(state.noFileFound)
-        dec     a
-        jr      z,.drawFileStatus
+        or      a
+        jr      nz,.drawFileStatus
         ld      hl,FileStatusOkTxt
 .drawFileStatus:
         ld      de,FileStatusAdr
@@ -910,7 +927,7 @@ RedrawMainMap:
         ld      hl,$4000 + 4*80 + 21 + 12 + 19*2
         call    DrawTableGridVerticalLine
         ; draw filename
-        ld      hl,dspedge.defaultCfgFileName
+        ld      hl,CFG_FILENAME
         ld      de,FileNameAdr
         call    DrawHlStringAtDe
         ; draw fixed legend text
@@ -1105,8 +1122,6 @@ FixedLegendText:
         DC      "file ["
         DW      $4000 + 26*80 + 19
         DC      "]"
-;         DW      FileNameAdr   ;;FIXME DEBUG
-;         DC      16,17,32,18,19,32,20,21,32,22,23,32,24,32,25,32,26,32,27,32,28,29,30,31,32,0," (debug)"
         DW      0
 
 EdgeLegendTxt:
@@ -1173,6 +1188,13 @@ tilemapFont_char24:
     OPT push listoff
         INCLUDE "tilemap_font_8x6.i.asm"
     OPT pop
+
+; read parsed CFG into array stored where the font originally was
+ReadMarginsArray:   EQU     tilemapFont_char24
+ReadMarginsArraySZ: EQU     dspedge.S_MARGINS * dspedge.MODE_COUNT
+; and use the space also as parsing buffer (at least 513B needed for "runtime" function)
+ParsingBuffer:      EQU     ReadMarginsArray + ReadMarginsArraySZ
+    ASSERT ParsingBuffer + 513 <= $
 
 ;-------------------------------
 ;; FIXME requires cleanup (everything below)
