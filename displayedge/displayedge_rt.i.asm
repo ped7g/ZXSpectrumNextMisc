@@ -124,7 +124,7 @@ ParseCfgFile:
         ; Input:
         ;       HL = filename of CFG file (zero terminated string for OS call)
         ;       DE = S_MARGINS[MODE_COUNT] array (4 * 9 = 36 bytes of memory to store results)
-        ;       BC = 513 byte buffer for reading file content
+        ;       BC = aligned 256+1 byte buffer for reading file content ($xx00 address)
         ; Output:
         ;       when Fc = 1
         ;       A = esxDOS error (fopen, fread or fclose failed)
@@ -135,8 +135,9 @@ ParseCfgFile:
         ; Uses:
         ;       AF, BC, DE, HL, IX
 
+                ld      (.oldSP),sp
                 ld      (.MarginsPtr),de
-                ld      (.BufferPtr),bc
+                push    bc
                 push    hl
                 push    hl
             ; initialize margins array to all -1
@@ -152,59 +153,53 @@ ParseCfgFile:
                 ld      a,'*'           ; current drive (if not overriden in by fname)
                 ld      b,$01           ; read-only
                 rst     $08 : DB $9A    ; F_OPEN
+                pop     hl              ; HL = buffer pointer
                 ret     c               ; F_OPEN failed, return with carry set + A=error
                 ld      (.Fhandle),a
-                ld      bc,0            ; zero bytes in buffer remaining
-                ld      hl,(.BufferPtr)
+                ld      bc,$100         ; read full 256B buffer at beginning
+                call    .readBufferBc
                 call    .parseNewLineLoop
             ; F_CLOSE the file
 .Fhandle=$+1    ld      a,low .Fhandle  ; self-modify storage for handle
                 rst     $08 : DB $9B    ; F_CLOSE
+.esxError:  ; throw away all stack values to preserve A + Fc + HL, and return up
+.oldSP=$+1      ld      sp,0            ; self-modify storage
                 ret
 
-.parseNewLineLoop:
-            ; BC = remaining chars, HL = current buffer
-                inc     b
-                djnz    .hasMoreThan255CharsInBuffer
-            ; read more bytes into buffer to saturate it back to 512B
-                ; first compact current buffer
-                ld      de,(.BufferPtr)
-                xor     a
-                or      c
-                jr      z,.reallyEmptyBuffer
-                ldir
-.reallyEmptyBuffer:
-                ; calculate how many more to read to saturate buffer
-.BufferPtr=$+1  ld      hl,.BufferPtr   ; self-modify storage of value
-                inc     h
-                inc     h
-                sbc     hl,de           ; CF=0 from `or c`
-                ld      bc,hl           ; fake BC=HL
-                ex      de,hl           ; HL = after compacted buffer (to read to)
+.getCh:
+                ld      a,(hl)
+                inc     l
+                jp      pe,.readBuffer  ; $xx7F -> $xx80, load first 128B of buffer
+                ret     nz              ; $xxFF -> $xx00 is Fz=1 -> load second 128B
+.readBuffer:
+                ; buffer is empty, read 128 bytes more
+                ld      bc,$80
+.readBufferBc:  ; with custom length
+                push    af              ; char read
+                push    hl              ; address of next char
+                ; advance HL by $80 (or custom chunk size), to read one buffer ahead
+                ld      a,l
+                add     a,c
+                ld      l,a
                 push    hl
                 pop     ix
                 ld      a,(.Fhandle)
+                push    de              ; preserve DE (is working register for parser)
                 rst     $08 : DB $9D    ; F_READ: A = file handle, HL+IX = address, BC = bytes to read
-                ret     c               ; F_READ failed, return with carry set + A=error
+                jr      c,.esxError
                 ; BC=DE=bytes read, HL+=BC
-                    ;TODO debug real NextZXOS, CSpect does return HL+=original_BC, not actual!
-                    ; workaround for CSpect bug code
-                    add     ix,bc
-                    push    ix
-                    pop     hl
-                ; original code expecting HL+=BC
-                ld      (hl),0          ; set extra null terminator after last byte read
-                ld      de,(.BufferPtr)
-                sbc     hl,de           ; HL=bytes in buffer
-                ex      de,hl           ; HL=buffer
-                ld      bc,de           ; fake BC=DE (bytes in buffer)
-                ; check if buffer was topped up to full 512B
-                ld      a,b
-                cp      2
-                jr      z,.hasMoreThan255CharsInBuffer
-                ; file did end already, fake long buffer to not do fread any more (and hit zero)
-                ld      b,8
-.hasMoreThan255CharsInBuffer:
+                ; CSpect 2.12.5 w/o full NextZXOS returns always HL + original_BC (emu bug)
+                pop     de
+                bit     7,c             ; will not catch initial BC=$100 read
+                jr      nz,.full128BytesRead    ; but that writes terminator at +256 (ok)
+                ld      (hl),0          ; add null terminator after last read byte
+.full128BytesRead:
+                pop     hl              ; restore current address
+                pop     af              ; restore the char read
+                ret
+
+.parseNewLineLoop:
+            ; HL = current buffer
                 call    skipWhiteSpace
                 ; check for known keywords 'hdmi, zx48, zx128, zx128p3, pentagon', else skipToEol
                 call    isKeyword       ; ZF=0 no match, ZF=1 match, HL+BC points after, A=0..8 match number
@@ -214,8 +209,7 @@ ParseCfgFile:
                 call    skipWhiteSpace
                 cp      '='
                 jr      nz,.skipToEol
-                inc     hl
-                dec     bc
+                call    .getCh          ; eat the '=' char
             ; prepare to parse values
                 ld      d,S_MARGINS
                 mul     de
@@ -226,11 +220,9 @@ ParseCfgFile:
                 ; fallthrough to .skipToEol (to skip rest of line)
                 ;  |
 .skipToEol:
-                ld      a,(hl)
+                call    .getCh
                 or      a
                 ret     z               ; null-terminated file or EOF
-                inc     hl
-                dec     bc
                 cp      10
                 jr      z,.skipEolItself
                 cp      13
@@ -245,8 +237,7 @@ ParseCfgFile:
                 jr      .parseNewLineLoop
 
 skipWhiteSpace_doSkip:
-                inc     hl
-                dec     bc
+                call    ParseCfgFile.getCh  ; eat the whitespace
 skipWhiteSpace:
                 ld      a,(hl)
                 cp      ' '         ; space char
@@ -263,7 +254,7 @@ ParseFourValuesToDe:
             ; skip any whitespace and single comma within it
                 call    skipWhiteSpace
                 cp      ','
-                call    z,skipWhiteSpace_doSkip
+                call    z,skipWhiteSpace_doSkip ; eats comma first :)
                 or      a
                 ret     z           ; null terminator hit, abort everything
             ; parse the decimal digits into value
@@ -284,8 +275,7 @@ ParseFourValuesToDe:
                 cp      '9'+1
                 ret     nc
             ; convert to value
-                inc     hl
-                dec     bc
+                call    ParseCfgFile.getCh  ; eat the digit char
                 ld      d,10
                 mul     de
                 sub     '0'
@@ -296,52 +286,49 @@ isKeyword:
     ; Fz=0 no match, keeps HL+BC
     ; Fz=1 match, HL+BC points after, A=match number (0..N)
                 ld      de,keywordsModes
-                push    bc
-                push    hl
                 ld      bc,$0100    ; match flag + match number
+                push    hl
 .matchLoop:
                 ld      a,(de)
                 inc     de
                 or      a
                 jr      nz,.keywordContinues
                 djnz    .wordMismatch
-                ; word match, check end word boundary, can be anything <= 32 or '=' char
+            ; keyword match, check end word boundary, can be anything <= 32 or '=' char
                 ld      a,(hl)
                 cp      ' '+1
                 jr      c,.wordMatch
                 cp      '='
                 jr      nz,.wordMismatch
 .wordMatch:
+            ; keyword did match, return HL advanced, but by "getCh" to keep
+            ; the buffer preload working too
                 pop     de
-                or      a
-                sbc     hl,de       ; HL = length of keyword
-                ex      de,hl       ; DE = length of keyword, HL = original HL
-                ex      (sp),hl
-                sbc     hl,de       ; update original BC (in HL and stack)
-                ex      (sp),hl
-                add     hl,de       ; update original HL
-                ld      a,c         ; A = match number
-                pop     bc
-                cp      a           ; Fz=1 to signal match
+                ex      de,hl       ; HL = old HL, DE = target HL, HL != DE (keyword.length != 0)
+                ld      d,c         ; D = match number
+.AdvanceHlLoop:
+                call    ParseCfgFile.getCh
+                ld      a,e
+                cp      l
+                jr      nz,.AdvanceHlLoop   ; also sets Fz=1 to signal match
+                ld      a,d         ; A = match number
                 ret
 .wordMismatch:
+            ; keyword mismatch, reset matching and start comparing with next keyword
                 pop     hl          ; restore original HL
                 ld      a,(de)
-                or      a
-                jr      nz,.moreKeywords
-                pop     bc          ; restore original BC
-                dec     a           ; Fz=0
-                ret
-.moreKeywords:
+                cp      1
+                ret     c           ; if A == 0, return with Fz=0
+            ; new keyword starts here (A = first char already)
                 push    hl
                 inc     de
-                inc     c
+                inc     c           ; keyword index
 .keywordContinues:
                 cp      (hl)
                 jr      z,.charDoesMatch
-                ld      b,2
+                ld      b,2         ; works also as B=1 init for next keyword match loop
 .charDoesMatch:
-                inc     hl
+                inc     l
                 jr      .matchLoop
 
 keywordsModes:

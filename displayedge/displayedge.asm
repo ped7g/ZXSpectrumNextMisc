@@ -260,12 +260,6 @@ start:
         call    ParseCfgFile
 
     ;; enter the interactive loop (make sure the screen will get full refresh)
-    ; FIXME all
-        ; when "save" is requested, parse the old cfg file and overwrite/add new data:
-        ; - probably rename old to backup, open for read, open for write new cfg, copy
-        ; - all comment lines, write modified lines instead of old values where needed
-        ; - add new modes after the other block, close the files
-        ; - (delete old backup before first step)
 
 MainLoop:
     ; check if whole video mode did change
@@ -468,6 +462,12 @@ HandleControls:
         ld      (LabelQuitAdr + 2*80 - 1),a
         .3 halt
         ;FIXME all
+    ; FIXME all
+        ; when "save" is requested, parse the old cfg file and overwrite/add new data:
+        ; - probably rename old to backup, open for read, open for write new cfg, copy
+        ; - all comment lines, write modified lines instead of old values where needed
+        ; - add new modes after the other block, close the files
+        ; - (delete old backup before first step)
         ret
 
 .notSavePending:
@@ -1193,8 +1193,8 @@ tilemapFont_char24:
 ReadMarginsArray:   EQU     tilemapFont_char24
 ReadMarginsArraySZ: EQU     dspedge.S_MARGINS * dspedge.MODE_COUNT
 ; and use the space also as parsing buffer (at least 513B needed for "runtime" function)
-ParsingBuffer:      EQU     ReadMarginsArray + ReadMarginsArraySZ
-    ASSERT ParsingBuffer + 513 <= $
+ParsingBuffer:      EQU     (ReadMarginsArray + ReadMarginsArraySZ + 255) & -256
+    ASSERT ParsingBuffer + 257 <= $
 
 ;-------------------------------
 ;; FIXME requires cleanup (everything below)
