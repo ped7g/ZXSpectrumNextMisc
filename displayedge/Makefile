@@ -11,7 +11,7 @@ DISPLAYEDGE: displayedge.asm $(INCLUDE_FILES) Makefile
 DISPLAYEDGE.SNA: displayedge.asm $(INCLUDE_FILES) Makefile
 	$(SJASMPLUS) --zxnext=cspect -DTESTING $(SJASMPLUSFLAGS) displayedge.asm
 
-.PHONY: all cspectTest clean gitrelease
+.PHONY: all cspectTest clean gitrelease fullImage
 
 all: DISPLAYEDGE DISPLAYEDGE.SNA
 
@@ -22,3 +22,8 @@ clean:
 
 gitrelease: SJASMPLUSFLAGS = --msg=war --nologo
 gitrelease: DISPLAYEDGE
+
+fullImage: all
+	hdfmonkey put tbblue.img DISPLAYEDGE DOT
+	hdfmonkey put tbblue.img test.cfg
+	./rCSmmc
