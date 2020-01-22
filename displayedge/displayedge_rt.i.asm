@@ -124,7 +124,7 @@ ParseCfgFile:
         ; Input:
         ;       HL = filename of CFG file (zero terminated string for OS call)
         ;       DE = S_MARGINS[MODE_COUNT] array (4 * 9 = 36 bytes of memory to store results)
-        ;       BC = aligned 256+1 byte buffer for reading file content ($xx00 address)
+        ;       BC = aligned 256 byte buffer for reading file content ($xx00 address)
         ; Output:
         ;       when Fc = 1
         ;       A = esxDOS error (fopen, fread or fclose failed)
@@ -156,9 +156,11 @@ ParseCfgFile:
                 pop     hl              ; HL = buffer pointer
                 ret     c               ; F_OPEN failed, return with carry set + A=error
                 ld      (.Fhandle),a
-                ;FIXME doesn't add null terminator for file 128..255B long
-                ld      bc,$100         ; read full 256B buffer at beginning
-                call    .readBufferBc
+            ; load full buffer in two 128B steps (to make zero-terminator logic work!)
+                ld      l,$80           ; L=$80 to load first half of buffer
+                call    .readBuffer
+                ld      l,b             ; L=0 to load second half of buffer
+                call    .readBuffer
                 call    .parseNewLineLoop
             ; F_CLOSE the file
 .Fhandle=$+1    ld      a,low .Fhandle  ; self-modify storage for handle
@@ -173,12 +175,11 @@ ParseCfgFile:
                 jp      pe,.readBuffer  ; $xx7F -> $xx80, load first 128B of buffer
                 ret     nz              ; $xxFF -> $xx00 is Fz=1 -> load second 128B
 .readBuffer:
-                ; buffer is empty, read 128 bytes more
+            ; buffer is half-empty, read further 128 bytes
                 ld      bc,$80
-.readBufferBc:  ; with custom length
                 push    af              ; char read
                 push    hl              ; address of next char
-                ; advance HL by $80 (or custom chunk size), to read one buffer ahead
+                ; advance HL by $80, to read one buffer ahead
                 ld      a,l
                 add     a,c
                 ld      l,a
@@ -191,8 +192,8 @@ ParseCfgFile:
                 ; BC=DE=bytes read, HL+=BC
                 ; CSpect 2.12.5 w/o full NextZXOS returns always HL + original_BC (emu bug)
                 pop     de
-                bit     7,c             ; will not catch initial BC=$100 read
-                jr      nz,.full128BytesRead    ; but that writes terminator at +256 (ok)
+                bit     7,c
+                jr      nz,.full128BytesRead
                 ld      (hl),0          ; add null terminator after last read byte
 .full128BytesRead:
                 pop     hl              ; restore current address

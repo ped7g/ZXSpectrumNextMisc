@@ -1192,9 +1192,9 @@ tilemapFont_char24:
 ; read parsed CFG into array stored where the font originally was
 ReadMarginsArray:   EQU     tilemapFont_char24
 ReadMarginsArraySZ: EQU     dspedge.S_MARGINS * dspedge.MODE_COUNT
-; and use the space also as parsing buffer (at least 513B needed for "runtime" function)
+; and use the space also as parsing buffer (aligned 256B needed for "runtime" function)
 ParsingBuffer:      EQU     (ReadMarginsArray + ReadMarginsArraySZ + 255) & -256
-    ASSERT ParsingBuffer + 257 <= $
+    ASSERT ParsingBuffer + 256 <= $
 
 ;-------------------------------
 ;; FIXME requires cleanup (everything below)
