@@ -270,16 +270,16 @@ ParseFourValuesToDe:
 .parseDigits:
             ; check if next char is digit
                 ld      a,(hl)
-                cp      '0'
+                sub     '0'
                 ret     c
-                cp      '9'+1
+                cp      10
                 ret     nc
-            ; convert to value
-                call    ParseCfgFile.getCh  ; eat the digit char
+            ; next char is digit, add it to total value (already converted by check above)
                 ld      d,10
                 mul     de
-                sub     '0'
                 add     de,a
+            ; eat the digit char from input stream
+                call    ParseCfgFile.getCh
                 jr      .parseDigits
 
 isKeyword:
