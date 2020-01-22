@@ -156,6 +156,7 @@ ParseCfgFile:
                 pop     hl              ; HL = buffer pointer
                 ret     c               ; F_OPEN failed, return with carry set + A=error
                 ld      (.Fhandle),a
+                ;FIXME doesn't add null terminator for file 128..255B long
                 ld      bc,$100         ; read full 256B buffer at beginning
                 call    .readBufferBc
                 call    .parseNewLineLoop
@@ -323,6 +324,7 @@ isKeyword:
                 push    hl
                 inc     de
                 inc     c           ; keyword index
+                ;FIXME doesn't have B=1 set when keyword did match but end-boundary not
 .keywordContinues:
                 cp      (hl)
                 jr      z,.charDoesMatch
