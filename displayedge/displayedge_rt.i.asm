@@ -284,10 +284,10 @@ ParseFourValuesToDe:
                 jr      .parseDigits
 
 isKeyword:
-    ; Fz=0 no match, keeps HL+BC
-    ; Fz=1 match, HL+BC points after, A=match number (0..N)
+    ; Fz=0 no match, keeps HL
+    ; Fz=1 match, HL points after, A=match index (0..N)
                 ld      de,keywordsModes
-                ld      bc,$0100    ; match flag + match number
+                ld      bc,$0100    ; match flag + match index
                 push    hl
 .matchLoop:
                 ld      a,(de)
@@ -306,34 +306,34 @@ isKeyword:
             ; the buffer preload working too
                 pop     de
                 ex      de,hl       ; HL = old HL, DE = target HL, HL != DE (keyword.length != 0)
-                ld      d,c         ; D = match number
+                ld      d,c         ; D = match index
 .AdvanceHlLoop:
                 call    ParseCfgFile.getCh
                 ld      a,e
                 cp      l
                 jr      nz,.AdvanceHlLoop   ; also sets Fz=1 to signal match
-                ld      a,d         ; A = match number
+                ld      a,d         ; A = match index
                 ret
 .wordMismatch:
             ; keyword mismatch, reset matching and start comparing with next keyword
                 pop     hl          ; restore original HL
+                ld      b,1         ; reset match flag
                 ld      a,(de)
-                cp      1
+                cp      b
                 ret     c           ; if A == 0, return with Fz=0
             ; new keyword starts here (A = first char already)
                 push    hl
                 inc     de
                 inc     c           ; keyword index
-                ;FIXME doesn't have B=1 set when keyword did match but end-boundary not
 .keywordContinues:
                 cp      (hl)
                 jr      z,.charDoesMatch
-                ld      b,2         ; works also as B=1 init for next keyword match loop
+                inc     b           ; will be in 2..strlen(keyword)+1 range = ok
 .charDoesMatch:
                 inc     l
                 jr      .matchLoop
 
-keywordsModes:
+keywordsModes:                      ; (less than 128 chars per keyword)
                 DZ      'hdmi_50'
                 DZ      'zx48_50'
                 DZ      'zx128_50'
