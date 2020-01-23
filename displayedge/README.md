@@ -27,10 +27,12 @@ margins of actual video mode), and then edit the values until the "green frame" 
 well on your display, then save the config.
 
 The controls are:
-OP      : to select the edge of display for editing
-HJKL    : subtract/add to the margin of selected edge
-Q       : exit back to NextZXOS
-R       : reload the cfg file currently stored on disk (discards any changes)
-S       : save the currently modified values to cfg file
-F       : change between 50Hz/60Hz mode (also regular "F3" should work)
-T       : in VGA modes you can switch between different video-mode timings
+
+    OP   : to select the edge of display for editing
+    HJKL : subtract/add to the margin of selected edge
+    Q    : exit back to NextZXOS
+    R    : reload the cfg file currently stored on disk (discards any changes)
+    S    : save the currently modified values to cfg file
+    F    : change between 50Hz/60Hz mode (also regular "F3" should work)
+    T    : in VGA modes you can switch between different video-mode timings
+    (Q/R/S/F/T usually requires confirmation by pressing "Y" after)
