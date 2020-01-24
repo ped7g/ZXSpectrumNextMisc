@@ -163,7 +163,7 @@ ParseCfgFile:
                 call    .readBuffer
                 call    .parseNewLineLoop
             ; F_CLOSE the file
-.Fhandle=$+1    ld      a,low .Fhandle  ; self-modify storage for handle
+                ld      a,(.Fhandle)
                 rst     $08 : DB $9B    ; F_CLOSE
 .esxError:  ; throw away all stack values to preserve A + Fc + HL, and return up
 .oldSP=$+1      ld      sp,0            ; self-modify storage
@@ -185,7 +185,7 @@ ParseCfgFile:
                 ld      l,a
                 push    hl
                 pop     ix
-                ld      a,(.Fhandle)
+.Fhandle=$+1    ld      a,low .Fhandle  ; self-modify storage for handle
                 push    de              ; preserve DE (is working register for parser)
                 rst     $08 : DB $9D    ; F_READ: A = file handle, HL+IX = address, BC = bytes to read
                 jr      c,.esxError
@@ -204,7 +204,7 @@ ParseCfgFile:
             ; HL = current buffer
                 call    skipWhiteSpace
                 ; check for known keywords 'hdmi, zx48, zx128, zx128p3, pentagon', else skipToEol
-                call    isKeyword       ; ZF=0 no match, ZF=1 match, HL+BC points after, A=0..8 match number
+                call    isKeyword       ; ZF=0 no match, ZF=1 match, HL points after, A=0..8 match number
                 jr      nz,.skipToEol
                 ld      e,a
                 ; look for "assign" character
@@ -335,15 +335,15 @@ isKeyword:
                 jr      .matchLoop
 
 keywordsModes:                      ; (less than 128 chars per keyword)
-                DZ      'hdmi_50'
-                DZ      'zx48_50'
-                DZ      'zx128_50'
-                DZ      'zx128p3_50'
-                DZ      'hdmi_60'
-                DZ      'zx48_60'
-                DZ      'zx128_60'
-                DZ      'zx128p3_60'
-                DZ      'pentagon'
+.h_5            DZ      'hdmi_50'
+.z4_5           DZ      'zx48_50'
+.z1_5           DZ      'zx128_50'
+.z3_5           DZ      'zx128p3_50'
+.h_6            DZ      'hdmi_60'
+.z4_6           DZ      'zx48_60'
+.z1_6           DZ      'zx128_60'
+.z3_6           DZ      'zx128p3_60'
+.p              DZ      'pentagon'
                 DB      0           ; end of keywords
 
     ENDMODULE

@@ -113,6 +113,7 @@ B           BYTE    -1      ; bottom
 labelDot    WORD    0       ; address where to write display dot
 cellAdr     WORD    0       ; address of big table cell on screen at [1,0] char inside
 nextMode    BYTE    0
+keyword     WORD    0       ; address of keyword used in the CFG file
     ENDS
 
     STRUCT S_MODE_EDGES
@@ -169,8 +170,10 @@ M_GETERR                        equ $93
 F_OPEN                          equ $9A
 F_CLOSE                         equ $9B
 F_READ                          equ $9D
+F_WRITE                         equ $9E
 F_SEEK                          equ $9F
 F_FGETPOS                       equ $A0
+F_UNLINK                        equ $AD
 F_RENAME                        equ $B0
 FA_READ                         equ $01
 
@@ -266,6 +269,7 @@ MainLoop:
         call    DidVideoModeChange
         jr      z,.noModeChange
     ; calculate EdgesData address for new mode
+        ASSERT  S_MODE_EDGES * dspedge.MODE_COUNT < 256  ; guardian in case the struct gets too big
         ld      e,a
         ld      d,S_MODE_EDGES
         mul     de
@@ -461,14 +465,7 @@ HandleControls:
         ld      a,CHAR_DOT_YELLOW       ; mark it yellow while processing
         ld      (LabelQuitAdr + 2*80 - 1),a
         .3 halt
-        ;FIXME all
-    ; FIXME all
-        ; when "save" is requested, parse the old cfg file and overwrite/add new data:
-        ; - probably rename old to backup, open for read, open for write new cfg, copy
-        ; - all comment lines, write modified lines instead of old values where needed
-        ; - add new modes after the other block, close the files
-        ; - (delete old backup before first step)
-        ret
+        jp      SaveCfgFile
 
 .notSavePending:
         djnz    .notFreqPending
@@ -498,21 +495,24 @@ EdgeAdjustConstantsTable:
         DB      +8, +1, -1, -8
 
 EdgesData:
-.hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00 }}
-.z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0 }}
-.z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0 }}
-.z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0 }}
-.hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00 }}
-.z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0 }}
-.z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0 }}
-.z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0 }}
-.pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90 }}
+.hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00, dspedge.keywordsModes.h_5  }}
+.z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0, dspedge.keywordsModes.z4_5 }}
+.z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0, dspedge.keywordsModes.z1_5 }}
+.z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0, dspedge.keywordsModes.z3_5 }}
+.hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00, dspedge.keywordsModes.h_6  }}
+.z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0, dspedge.keywordsModes.z4_6 }}
+.z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0, dspedge.keywordsModes.z1_6 }}
+.z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0, dspedge.keywordsModes.z3_6 }}
+.pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90, dspedge.keywordsModes.p    }}
 
 state:      S_STATE     {0, 0, 0}
 
 debugCfgName:
         DZ      "test.cfg"
         DB      32|128          ; bit7 terminated for UI of .displayedge tool
+
+testBackupFilename:
+        DZ      "test.bak"
 
 ;-------------------------------
 readNextReg2A:
@@ -594,6 +594,272 @@ ParseCfgFile:
         ld      a,dspedge.MODE_COUNT
         ld      (DidVideoModeChange.oM),a
         ret
+
+;-------------------------------
+SaveCfgFile:
+        push    ix
+        call    .internal
+        ;Fc=1 - error in writing file
+        ;FIXME reset "original" values, force full refresh (by faking mode change)
+        pop     ix
+        ret
+
+.internal:
+    ; init all internals first
+        ld      a,$FF
+        ld      (dspedge.ParseCfgFile.Fhandle),a    ; invalid file handle for read file
+        ld      (dspedge.ParseCfgFile.oldSP),sp
+        ;FIXME add remaining things to init
+    ; mark all modes which require save - reusing/merging into "modified" flag
+        ld      hl,EdgesData + S_MODE_EDGES.orig.L
+        ld      b,dspedge.MODE_COUNT
+.setToSaveFlagLoop:
+        ; check if original values are != 255 (were read from file) -> then mark as "modified"
+        ld a,(hl) : inc hl : and (hl) : inc hl : and (hl) : inc hl : and (hl)
+        ; A == orig.L & orig.R & orig.T & orig.B, A == 255 iff all of them are 255
+        inc     a                       ; all 255 -> 0 (don't mark it, wasn't in file)
+        add     hl,S_MODE_EDGES.modified - S_MODE_EDGES.orig.B
+        or      (hl)            ; modified ; mix with real "modified" value
+        ld      (hl),a
+        add     hl,S_MODE_EDGES - S_MODE_EDGES.modified + S_MODE_EDGES.orig.L ; next mode
+        djnz    .setToSaveFlagLoop
+    ; if old CFG file exists, backup it, then open it for reading
+        ld      a,(state.noFileFound)   ; $FF when file was not found
+        rra
+        jr      c,.skipRenameAndOpen
+        ; delete old backup first (if it exists)
+        ld      a,'*'
+        ld      hl,testBackupFilename
+        ESXDOS  F_UNLINK                ; don't even check for the error here
+        ; rename the current CFG file to backup file
+        ld      a,'*'
+        ld      hl,CFG_FILENAME
+        ld      de,testBackupFilename
+        ESXDOS  F_RENAME
+        jr      c,.skipRenameAndOpen    ; in case renaming of old file fails, try at least save
+        ; fopen the backup file for reading the original data
+        ld      a,'*'
+        ld      hl,testBackupFilename
+        ld      b,$01           ; read-only
+        ESXDOS  F_OPEN
+        jr      c,.skipRenameAndOpen    ; in case old file fopen fails, try at least save
+        ld      (dspedge.ParseCfgFile.Fhandle),a
+        ; read initial 256B of buffer
+        ld      hl,ParsingBuffer+$80
+        call    dspedge.ParseCfgFile.readBuffer ; BTW does preserve carry flag for `rl c` below
+        ld      l,b
+        call    dspedge.ParseCfgFile.readBuffer ; BTW does preserve carry flag for `rl c` below
+.skipRenameAndOpen:
+        rl      c               ; remember Fc in C
+    ; open new cfg file for write
+        push    bc
+        ld      a,'*'
+        ld      hl,CFG_FILENAME
+        ld      b,$02+$0C       ; +write, +create_or_truncate
+        ESXDOS  F_OPEN
+        pop     bc
+        ret     c               ; error opening file for write, just exit
+        ld      (.Whandle),a    ; write-file handle
+        ld      de,WritingBuffer
+        rr      c
+        call    c,.writeNewFileComments ; add few initial comments to brand new file
+    ; parse the old file, copy unknown content to new file (comments, etc?), override data
+        ld      a,(dspedge.ParseCfgFile.Fhandle)
+        inc     a
+        jr      z,.oldFileClosed    ; read file is not open
+        ld      hl,ParsingBuffer
+        ld      b,l
+        ld      c,l                 ; BC=0 (not in comment mode, B=0 as constant)
+.ParseOldFileLoop:
+        push    bc
+        push    de
+        rlc     c
+        jr      nz,.noKeywordYet
+        call    dspedge.isKeyword   ; ZF=0 no match, ZF=1 match, HL points after, A=0..8 match number
+        jr      nz,.noKeywordYet
+    ;   if keyword is detected (doesn't even check for "=", word boundary is enough)
+        ; calculate address of mode structure
+        ld      e,a
+        ld      d,S_MODE_EDGES
+        mul     de
+        add     de,EdgesData
+        ld      ix,de               ; fake IX = mode structure
+        pop     de                  ; DE = write buffer again
+        push    hl                  ; preserve parsing buffer pointer
+        push    ModifiedByTxt       ; tail comment "; modified by..." (contains EOL!)
+        call    SaveModeData
+        ; dismiss rest of line
+        pop     hl                  ; HL = ParsingBuffer (points just after the keyword)
+.dismissLineLoop:
+        call    dspedge.ParseCfgFile.getCh
+        or      a
+        jr      z,.continueAfterKeyword
+        cp      10
+        jr      z,.dismissEolFound
+        cp      13
+        jr      nz,.dismissLineLoop
+.dismissEolFound:
+        pop     bc
+        jr      .ParseOldFileLoop   ; try next line (may start with keyword)
+.noKeywordYet:
+    ; copy anything per char. if ";" is found, switch to Eol comment mode (no more keyword check)
+        call    dspedge.ParseCfgFile.getCh
+        pop     de
+.continueAfterKeyword:
+        pop     bc
+        or      a
+        jr      z,.OldFileEof
+        push    bc
+        call    writeCh
+        pop     bc
+        cp      10
+        jr      z,.eolFound
+        cp      13
+        jr      z,.eolFound
+        cp      ';'
+        jr      nz,.ParseOldFileLoop
+        ld      c,h                 ; enter comment mode
+        jr      .ParseOldFileLoop
+.eolFound:
+        ld      c,b                 ; leave comment mode
+        jr      .ParseOldFileLoop
+.OldFileEof:
+        ; fclose old-file
+        ld      a,(dspedge.ParseCfgFile.Fhandle)
+        rst     $08 : DB F_CLOSE
+.oldFileClosed:
+    ; foreach mode filter !saved -> save mode on new line
+        ; check if there is already newline ahead
+        dec     e
+        ld      a,(de)
+        inc     e
+        cp      10
+        jr      z,.hasEolAfterOldFile
+        ld      a,10                ; EOL to make mode data start at new line
+        call    writeCh
+.hasEolAfterOldFile:
+        ld      b,dspedge.MODE_COUNT
+        ld      ix,EdgesData
+.writeRemainingModesLoop:
+        push    bc
+        push    ix
+        push    ByTxt
+        call    SaveModeData
+        pop     ix
+        ld      bc,S_MODE_EDGES
+        add     ix,bc
+        pop     bc
+        djnz    .writeRemainingModesLoop
+    ; dump remaining WritingBuffer
+        xor     a
+        cp      e
+        jr      z,.emptyWritingBuffer
+        ld      b,a
+        ld      c,e
+        ld      de,WritingBuffer
+        call    writeCh.BcBytes
+.emptyWritingBuffer:
+    ; fclose write file
+.Whandle=$+1    ld      a,$FF       ; self-modify storage for write-handle
+        rst     $08 : DB F_CLOSE
+        ret
+
+.writeNewFileComments:
+        ld      hl,NewFileCommentsTxt
+        jr      putS
+
+writeCh:
+    ; store character in A into WritingBuffer
+        ld      (de),a
+        inc     e
+        ret     nz
+    ; WritingBuffer is full, dump it into the file
+        ld      bc,$100
+.BcBytes:
+        push    af                  ; preserve the A, BC, DE
+        push    de
+        push    hl
+        ex      de,hl               ; HL = WritingBuffer
+        ld      a,(SaveCfgFile.Whandle)
+        ESXDOS  F_WRITE
+        jp      c,dspedge.ParseCfgFile.esxError
+        pop     hl
+        pop     de
+        pop     af
+        ret
+
+putS:
+        ld      a,(hl)
+        inc     hl
+        or      a
+        ret     z
+        call    writeCh
+        jr      putS
+
+printfFourEdgeValuesToWB2:
+        push    de
+        ld      de,WritingBuffer2
+        push    de
+        call    .printfTwoValuesAndCommas
+        call    .printfTwoValuesAndCommas
+        ex      de,hl
+        dec     hl          ; remove last comma
+        ld      (hl),0
+        pop     hl
+        pop     de
+        ret
+.printfTwoValuesAndCommas:
+        call    .printfValueAndComma
+.printfValueAndComma:
+        ld      a,(hl)
+        inc     hl
+        call    DrawAdecAtDe
+        ld      a,','
+        ld      (de),a
+        inc     de
+        ret
+
+SaveModeData:
+        ; check if it was already saved
+        ld      a,(ix+S_MODE_EDGES.modified)
+        or      a
+        jr      z,.alreadySaved
+        ; if not, save it now
+        ld      (ix+S_MODE_EDGES.modified),0    ; clear modified flag
+        ld      hl,(ix+S_MODE_EDGES.ui.keyword) ; fake HL = keyword pointer
+        push    ix
+        call    putS
+        ld      a,'='
+        call    writeCh
+        ; store values as well
+        pop     hl                  ; mode struct, at +0 offset are the L,R,T,B to save
+        ASSERT S_MODE_EDGES.cur.L == 0
+        call    printfFourEdgeValuesToWB2       ; HL = WritingBuffer2
+        call    putS
+        ; write the tail comment
+        pop     hl
+        ex      (sp),hl
+        jr      putS
+.alreadySaved:
+        ; release the tail-comment from stack
+        pop     hl
+        ex      (sp),hl
+        ret
+
+ModifiedByTxt:
+        DB      " ; modified"
+ByTxt:
+        DB      " ; by .displayedge", 10, 0
+
+NewFileCommentsTxt:
+        DB      "; Visible display edge config",10
+        DB      "; produced by .displayedge",10
+        DB      "; recognized video modes:",10
+        DB      "; hdmi, zx48, zx128, zx128p3",10
+        DB      "; with _50 / _60 suffix for Hz",10
+        DB      "; pentagon (all lowercase)",10
+        DB      "; Values: left,right,top,bottom",10
+        DB      10,0
 
 ;-------------------------------
 RedrawUiControls:
@@ -1187,14 +1453,17 @@ tilemapFont:    EQU     tilemapFont_char24 - 24*32
 tilemapFont_char24:
     OPT push listoff
         INCLUDE "tilemap_font_8x6.i.asm"
+;         INCBIN "ned_gfx_font.bin"
     OPT pop
 
 ; read parsed CFG into array stored where the font originally was
 ReadMarginsArray:   EQU     tilemapFont_char24
 ReadMarginsArraySZ: EQU     dspedge.S_MARGINS * dspedge.MODE_COUNT
-; and use the space also as parsing buffer (aligned 256B needed for "runtime" function)
+; and use the space also as buffers (must be 256B-aligned)
 ParsingBuffer:      EQU     (ReadMarginsArray + ReadMarginsArraySZ + 255) & -256
-    ASSERT ParsingBuffer + 256 <= $
+WritingBuffer:      EQU     ParsingBuffer + 256
+WritingBuffer2:     EQU     WritingBuffer + 256
+    ASSERT WritingBuffer2 + 256 <= $
 
 ;-------------------------------
 ;; FIXME requires cleanup (everything below)
