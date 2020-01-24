@@ -147,6 +147,7 @@ lastCtrlKey         BYTE    0   ; save/reload/quit/hz/timing when waiting for co
 debounceKey         BYTE    0
 modified            BYTE    0   ; set if any of modes (even inactive) is modified
 noFileFound         BYTE    0
+esxErrorNo          BYTE    1
     ENDS
 
 KEY_DEBOUNCE_WAIT   EQU     8
@@ -186,6 +187,25 @@ CSP_BREAK   MACRO : IFDEF TESTING : break : ENDIF : ENDM
 ;;-------------------------------
 ;; Start of the machine code itself
 ;;-------------------------------
+
+    ;; reserved space for values (but not initialized, i.e. not part of the binary)
+
+    ; actually in DISPLAYEDGE tool these re-use the same memory area where font was stored
+
+    ; (turned out the DS/BLOCK does overwrite device memory always, so I'm reserving space
+    ; here ahead of the real machine code is produced, the real code will later overwrite
+    ; the memory as desired)
+
+    ORG tilemapFont_char24
+EsxErrorBuffer:     DS      34
+ReadMarginsArray:   DS      dspedge.S_MARGINS * dspedge.MODE_COUNT
+    ; parsing/writing buffers has to be 256B-aligned
+    ALIGN   256
+ParsingBuffer:      DS      256
+WritingBuffer:      DS      256
+WritingBuffer2:     DS      256
+
+lastReserved:   ASSERT  lastReserved < $3D00
 
         ORG     ORG_ADDRESS
 __bin_b DISP    DISP_ADDRESS
@@ -570,6 +590,9 @@ CurrentEdgeValueAdrToHl:
 
 ;-------------------------------
 ParseCfgFile:
+    ; reset save-error number to stop displaying any dangling error message
+        ld      a,1
+        ld      (state.esxErrorNo),a
     ; call the Cfg parser from runtime library
         ld      hl,CFG_FILENAME
         ld      de,ReadMarginsArray
@@ -600,7 +623,25 @@ SaveCfgFile:
         push    ix
         call    .internal
         ;Fc=1 - error in writing file
-        ;FIXME reset "original" values, force full refresh (by faking mode change)
+        jr      c,.esxErrorHappened
+        ; reset "original" values
+        ld      a,dspedge.MODE_COUNT
+        ld      hl,EdgesData+S_MODE_EDGES.cur
+        ld      de,EdgesData+S_MODE_EDGES.orig
+.resetOrigDataLoop:
+        ld      bc,S_MARGINS
+        ldir
+        add     hl,S_MODE_EDGES-S_MARGINS
+        add     de,S_MODE_EDGES-S_MARGINS
+        dec     a
+        jr      nz,.resetOrigDataLoop
+        ; reset esxErrorNo
+        ld      a,1                     ; 1 == esx_eok
+.esxErrorHappened:
+        ld      (state.esxErrorNo),a    ; remember esxdos error number
+        ; force full refresh (by faking mode change)
+        ld      a,dspedge.MODE_COUNT
+        ld      (DidVideoModeChange.oM),a
         pop     ix
         ret
 
@@ -609,7 +650,6 @@ SaveCfgFile:
         ld      a,$FF
         ld      (dspedge.ParseCfgFile.Fhandle),a    ; invalid file handle for read file
         ld      (dspedge.ParseCfgFile.oldSP),sp
-        ;FIXME add remaining things to init
     ; mark all modes which require save - reusing/merging into "modified" flag
         ld      hl,EdgesData + S_MODE_EDGES.orig.L
         ld      b,dspedge.MODE_COUNT
@@ -662,22 +702,25 @@ SaveCfgFile:
         ld      (.Whandle),a    ; write-file handle
         ld      de,WritingBuffer
         rr      c
-        call    c,.writeNewFileComments ; add few initial comments to brand new file
+        jr      nc,.ParseOldFile
+        call    .writeNewFileComments   ; add few initial comments to brand new file
+        jr      .oldFileClosed      ; read file is not open
     ; parse the old file, copy unknown content to new file (comments, etc?), override data
-        ld      a,(dspedge.ParseCfgFile.Fhandle)
-        inc     a
-        jr      z,.oldFileClosed    ; read file is not open
+.ParseOldFile:
         ld      hl,ParsingBuffer
         ld      b,l
         ld      c,l                 ; BC=0 (not in comment mode, B=0 as constant)
 .ParseOldFileLoop:
         push    bc
         push    de
+        ; when inside comment, skip keyword checking
         rlc     c
         jr      nz,.noKeywordYet
+        ; not in comment, check if the mode keyword is in file
         call    dspedge.isKeyword   ; ZF=0 no match, ZF=1 match, HL points after, A=0..8 match number
         jr      nz,.noKeywordYet
     ;   if keyword is detected (doesn't even check for "=", word boundary is enough)
+        ; (that I can't easily rewind old file if "=" is missing, so just ignoring...)
         ; calculate address of mode structure
         ld      e,a
         ld      d,S_MODE_EDGES
@@ -1192,8 +1235,21 @@ RedrawMainMap:
         call    DrawTableGridVerticalLine
         ld      hl,$4000 + 4*80 + 21 + 12 + 19*2
         call    DrawTableGridVerticalLine
-        ; draw filename
+    ; draw filename or esxdos error text
         ld      hl,CFG_FILENAME
+        ld      a,(state.esxErrorNo)    ; last esxErrorNo
+        cp      1
+        jr      z,.drawFileName
+        ; translate esxErrorNo to some text
+        ld      b,1             ; return error message to 32-byte buffer at DE
+        ld      de,EsxErrorBuffer
+        push    ix
+        ESXDOS  M_GETERR
+        pop     ix
+        ld      hl,EsxErrorBufferWithLabel
+        ld      a,CHAR_DOT_RED
+        ld      (hl),a
+.drawFileName:
         ld      de,FileNameAdr
         call    DrawHlStringAtDe
         ; draw fixed legend text
@@ -1447,6 +1503,10 @@ tilemapPalette_SZ:  EQU $ - tilemapPalette
 ; desperate times, desperate measures: this is font designed for copper-8x6 tilemode
 ; TODO replace with something designed for 8x8 later
 
+EsxErrorBufferWithLabel:
+        DB      CHAR_DOT_RED, "Save failed: "
+    ; the "tilemapFont_char24" address should follow, that area is used to extract esxdos error text
+
 tilemapFont:    EQU     tilemapFont_char24 - 24*32
         ; 24 chars skipped (3*256)
         ; starts at character 32 - 4 dir_arrows - 3 color dots - 1 reserve = 24
@@ -1456,80 +1516,7 @@ tilemapFont_char24:
 ;         INCBIN "ned_gfx_font.bin"
     OPT pop
 
-; read parsed CFG into array stored where the font originally was
-ReadMarginsArray:   EQU     tilemapFont_char24
-ReadMarginsArraySZ: EQU     dspedge.S_MARGINS * dspedge.MODE_COUNT
-; and use the space also as buffers (must be 256B-aligned)
-ParsingBuffer:      EQU     (ReadMarginsArray + ReadMarginsArraySZ + 255) & -256
-WritingBuffer:      EQU     ParsingBuffer + 256
-WritingBuffer2:     EQU     WritingBuffer + 256
-    ASSERT WritingBuffer2 + 256 <= $
-
-;-------------------------------
-;; FIXME requires cleanup (everything below)
-;-------------------------------
-;-------------------------------
-;-------------------------------
-;-------------------------------
-
-;-------------------------------
-;;FIXME just the remnants of custom error message exit
-
-;-------------------------------
-fclose: ret     ; this will be modified to NOP after fopen
-        ld      a,(handle)
-        ESXDOS  F_CLOSE
-        ld      a,201
-        ld      (fclose),a              ; lock fclose behind `ret` again (nop->ret)
-        ret
-
-;-------------------------------
-fread:
-handle=$+1  ld a,1              ; SMC self-modify code, storage of file handle
-        ESXDOS  F_READ
-        ret     nc
-        ; in case of error just continue into "fileError" routine
-fileError:                      ; esxDOS error code arrives in a
-        push    af
-        and     7
-        out     (254),a         ; modify also BORDER by low 3 bits of error code
-        pop     af
-        ld      b,1             ; return error message to 32-byte buffer at DE
-        ld      de,esxError
-        ESXDOS  M_GETERR
-        ld      hl,esxError
-;         jp      customErrorToBasic
-
-;-------------------------------
-prepareForErrorOutput           ; do "CLS" of ULA screen with white paper ("error" case)
-        nextreg MMU2_4000_NR_52,5*2   ; page-in the bank5 explicitly
-        nextreg MMU3_6000_NR_53,5*2+1
-        ld      a,7             ; "error" CLS
-        jr      clsWithBordercol.withA
-
-;-------------------------------
-clsWithBordercol        ; do "CLS" of ULA screen, using the border colour value from header
-        ld      a,7
-.withA: out     ($FE),a     ; change border colour
-        ; bank 5 should be already paged in here (nextregs reset)
-        ld      hl,$4000
-        ld      de,$4001
-        ld      bc,$1800
-        ld      (hl),l
-        ldir    ; HL=$5800, DE=$5801 (for next block)
-        .3 add  a,a         ; *8
-        ld      (hl),a
-        ld      bc,32*24-1
-        ldir
-        ret
-
 last:       ; after last machine code byte which should be part of the binary
-
-    ;; reserved space for values (but not initialized, i.e. not part of the binary)
-nexFileVersion  db      0       ; BCD-packed ($13 for V1.3)
-esxError        ds      34
-
-lastReserved:   ASSERT  lastReserved < $3D00
     ENDT        ;; end of DISP
 
     IFNDEF TESTING
