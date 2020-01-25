@@ -10,20 +10,66 @@
 ; Define USE_TO_READ_NEXT_REG to your function to read NextReg (IN/OUT in A, preserve BC)
 ; or keep undefined to let this source add `dspedge.ReadNextReg` function.
 ;
+; You can define DISPLAYEDGE_ORG_ADR to assemble this file in stand-alone way re-located
+; to the defined address, and produce the binary "displayedge_rt.bin", or you can include
+; this source file into your own source and deal with location/binary saving on your own
+; (see the .displayedge tool project (displayedge.asm+Makefile) for examples)
+; The standalone "displayedge_rt.bin" can be included to your project and use labels from
+; the export file (--exp sjasmplus option) to call the binary functions.
+;
 ; Changelist:
-; v1    18/01/2020 P7G    Initial version (unfinished)
+; v1    25/01/2020 P7G    First working version, before public test
+; v0    18/01/2020 P7G    Initial version (unfinished)
+;
 ;-------------------------------
-; # API (list of functions):
-; DetectMode                   - returns dspedge.MODE_* value (current display mode)
+; # API (list of functions), all symbols inside "dspedge" module:
+; ReadNextReg           - reads nextreg A into A (`-DUSE_TO_READ_NEXT_REG=<yours>` if you have own)
+; DetectMode            - returns dspedge.MODE_* value (current display mode)
+; defaultCfgFileName    - default CFG filename: "/sys/displayedge.cfg",0
+; SanitizeMarginValue   - A value clamped to 0..31 (32..127 -> 31, 128..255 -> 0)
+; ParseCfgFile          - will parse values from provided CFG file into memory
+;-------------------------------
 
     ; switch sjasmplus to correct syntax variant
     OPT push reset --zxnext --syntax=abfw
 
+    MODULE dspedge
+
     IFDEF DISPLAYEDGE_ORG_ADR
         ORG DISPLAYEDGE_ORG_ADR
+        OUTPUT "displayedge_rt.bin"
+
+        ; when assembling with DISPLAYEDGE_ORG_ADR defined, produce also export file
+        ; use "--exp=displayedge_rt.exp" to define the export name on command line
+        EXPORT dspedge.Begin
+        IFNDEF USE_TO_READ_NEXT_REG
+            EXPORT dspedge.ReadNextReg
+        ENDIF
+        EXPORT dspedge.DetectMode
+        EXPORT dspedge.defaultCfgFileName
+        EXPORT dspedge.SanitizeMarginValue
+        EXPORT dspedge.ParseCfgFile
+        EXPORT dspedge.End
+        ; video modes constants
+        EXPORT dspedge.MODE_HDMI_50
+        EXPORT dspedge.MODE_ZX48_50
+        EXPORT dspedge.MODE_ZX128_50
+        EXPORT dspedge.MODE_ZX128P3_50
+        EXPORT dspedge.MODE_HDMI_60
+        EXPORT dspedge.MODE_ZX48_60
+        EXPORT dspedge.MODE_ZX128_60
+        EXPORT dspedge.MODE_ZX128P3_60
+        EXPORT dspedge.MODE_PENTAGON
+        EXPORT dspedge.MODE_COUNT       ; number of different modes
+        ; S_MARGINS structure
+        EXPORT dspedge.S_MARGINS        ; length of structure
+        EXPORT dspedge.S_MARGINS.L      ; offset Left-margin pixels
+        EXPORT dspedge.S_MARGINS.R      ; offset Right-margin pixels
+        EXPORT dspedge.S_MARGINS.T      ; offset Top-margin pixels
+        EXPORT dspedge.S_MARGINS.B      ; offset Bottom-margin pixels
     ENDIF
 
-    MODULE dspedge
+Begin:
 
 MODE_HDMI_50        EQU         0
 MODE_ZX48_50        EQU         1
@@ -104,7 +150,7 @@ DetectMode:
                 ret
 
 defaultCfgFileName:
-                DZ      "$/sys/displayedge.cfg"     ; zero terminated for esxDOS
+                DZ      "/sys/displayedge.cfg"      ; zero terminated for esxDOS
                 DB      32|128          ; bit7 terminated for UI of .displayedge tool
 
 SanitizeMarginValue:
@@ -150,7 +196,7 @@ ParseCfgFile:
             ; open the file - use both HL + IX for filename, to work as dot command or app
                 pop     hl
                 pop     ix
-                ld      a,'*'           ; current drive (if not overriden in by fname)
+                ld      a,'$'           ; system drive (if not overriden in by fname)
                 ld      b,$01           ; read-only
                 rst     $08 : DB $9A    ; F_OPEN
                 pop     hl              ; HL = buffer pointer
@@ -346,6 +392,11 @@ keywordsModes:                      ; (less than 128 chars per keyword)
 .p              DZ      'pentagon'
                 DB      0           ; end of keywords
 
+End:
     ENDMODULE
+
+    IFDEF DISPLAYEDGE_ORG_ADR
+        OUTEND
+    ENDIF
 
     OPT pop     ; restore original configuration of sjasmplus syntax

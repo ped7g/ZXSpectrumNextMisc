@@ -24,7 +24,8 @@
 ; TODO without interactive part
 ;
 ; Changelist:
-; v1    16/01/2020 P7G    Initial version
+; v1    25/01/2020 P7G    First fully working version, before public test
+; v0    16/01/2020 P7G    Initial version (unfinished)
 ;
 ;-------------------------------
 ; See example of CFG file in the file "test.cfg" in the project git repo. Syntax rules:
@@ -35,50 +36,7 @@
 ;; the value is four decimal integers split by comma/space: left right top bottom of display
 ;; the values are number of pixels (in 320x256 resolution) not visible to user
 ;-------------------------------
-/* screen layout design
-- tilemode 80x32 (640x256x4) without attribute byte = 2560 bytes map
-- the rectangle around (invisible part is solid "//" pattern, green frame is 8 dynamically
-drawn chars gfx, inner part is "space" char)
-- there is arrow pointing to particular edge of screen
- -- O/P to turn arrow counterclockwise/clockwise
- -- J (-)/K (+) to remove/add margin (H/L to remove/add per 8px)
- -- some button to flip 50/60Hz (although F3 will work too)
-- near H/J/K/L controls there is current margin in pixels (decimal value)
-- at bottom there is filename of cfg file (being edited)
-- status of the file (new, no change, edited-needs save), buttons to reload/save
-- on right there is table for all modes, emphasing current display mode and selected value
 
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+
-|           |       50 Hz      |       60 Hz      |
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+
-|           |        99        | v    > 99 <      |  Controls:  !
-| HDMI      | 99 *modified* 99 | 99 *current*  99 |
-| (locked)  |        99        | ^      99        | O > right P ! "< left"/"^ top"/"> right"/"v bot."
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+
-|           |        99        |        99        |     99      !
-| ZX48      | 99 *modified* 99 | 99 *current*  99 | -8 -1 +1 +8 !
-|           |        99        |        99        |  H  J  K  L !
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+
-|           |        99        |        99        | *S*ave      ! green dots before first tap
-| ZX128     | 99 *modified* 99 | 99 *current*  99 | *R*eload    ! red dots after first tap (to confirm)
-|           |        99        |        99        | *Q*uit      !
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+ *T*iming    !
-|           |        --        |        99        |
-| ZX128+3   | -- not in cfg -- | 99 *current*  99 | press       !
-|           |        --        |        99        | S/R/Q/T     !
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+ twice to    !
-|           |        99        |                  | confirm     !
-| pentagon  | 99 *modified* 99 |                  |
-|           |        99        |                  |
-+-=-=-=-=-=-+-=-=-=-=-=--=-=-=-+-=-=-=-=-=--=-=-=-+ file [*new] !
-$/sys/displayedge.cfg
-
-video mode table is 51x23 +1 for filename
-screen estate is 64x24 (without the extra +-32px on sides, just regular 256x192)
-file status: "*new","*mod","*ok "  (yellow dot for new+mod, green for ok)
-asciiart: swap left/right side, the table is on right side, controls on left
-
-*/
 ;-------------------------------
     device zxspectrum48
     OPT reset --zxnext --syntax=abfw
@@ -99,8 +57,7 @@ asciiart: swap left/right side, the table is on right side, controls on left
     DEFINE TILE_GFX_ADR     $4A00           ; 128*32 = 4096
                                             ; = 6656 $1A00 -> fits into ULA classic VRAM
 
-;     DEFINE  CFG_FILENAME    dspedge.defaultCfgFileName
-    DEFINE  CFG_FILENAME    debugCfgName        ;FIXME DEBUG
+    DEFINE CFG_FILENAME     dspedge.defaultCfgFileName
 
     STRUCT S_MARGINS        ; pixels of margin 0..31 (-1 = undefined margin)
 L           BYTE    -1      ; left
@@ -150,6 +107,30 @@ noFileFound         BYTE    0
 esxErrorNo          BYTE    1
     ENDS
 
+    STRUCT S_PRESERVE
+        ; WORDs used, first byte is register number, second byte is preserved value
+turbo_07            WORD    TURBO_CONTROL_NR_07
+spr_ctrl_15         WORD    SPRITE_CONTROL_NR_15
+transp_fallback_4A  WORD    TRANSPARENCY_FALLBACK_COL_NR_4A
+tile_transp_4C      WORD    TILEMAP_TRANSPARENCY_I_NR_4C
+ula_ctrl_68         WORD    ULA_CONTROL_NR_68
+display_ctrl_69     WORD    DISPLAY_CONTROL_NR_69
+tile_ctrl_6B        WORD    TILEMAP_CONTROL_NR_6B
+tile_def_attr_6C    WORD    TILEMAP_DEFAULT_ATTR_NR_6C
+tile_map_adr_6E     WORD    TILEMAP_BASE_ADR_NR_6E
+tile_gfx_adr_6F     WORD    TILEMAP_GFX_ADR_NR_6F
+tile_xofs_msb_2F    WORD    TILEMAP_XOFFSET_MSB_NR_2F
+tile_xofs_lsb_30    WORD    TILEMAP_XOFFSET_LSB_NR_30
+tile_yofs_31        WORD    TILEMAP_YOFFSET_NR_31
+pal_ctrl_43         WORD    PALETTE_CONTROL_NR_43
+pal_idx_40          WORD    PALETTE_INDEX_NR_40
+mmu2_52             WORD    MMU2_4000_NR_52
+mmu3_53             WORD    MMU3_6000_NR_53
+    ; not preserving tilemode clip window coordinates, and tilemode palette
+    ; (intentionally, not expecting anyone to need it, or not being able to fix it)
+    ; (and subtle sub-states like half-written 9bit color to $44 -> will be lost too)
+    ENDS
+
 KEY_DEBOUNCE_WAIT   EQU     8
 
 CHAR_DOT_RED        EQU     25
@@ -184,10 +165,6 @@ ESXDOS      MACRO service? : push hl : pop ix : rst $08 : db service? : ENDM    
 NEXTREG2A   MACRO nextreg? : ld a,nextreg? : call readNextReg2A : ENDM
 CSP_BREAK   MACRO : IFDEF TESTING : break : ENDIF : ENDM
 
-;;-------------------------------
-;; Start of the machine code itself
-;;-------------------------------
-
     ;; reserved space for values (but not initialized, i.e. not part of the binary)
 
     ; actually in DISPLAYEDGE tool these re-use the same memory area where font was stored
@@ -205,7 +182,11 @@ ParsingBuffer:      DS      256
 WritingBuffer:      DS      256
 WritingBuffer2:     DS      256
 
-lastReserved:   ASSERT  lastReserved < $3D00
+lastReserved:   ASSERT  lastReserved < $3D00 && last < $3D00
+
+;;-------------------------------
+;; Start of the machine code itself
+;;-------------------------------
 
         ORG     ORG_ADDRESS
 __bin_b DISP    DISP_ADDRESS
@@ -216,6 +197,25 @@ start:
         rst $08 : db M_GETHANDLE
         rst $08 : db F_CLOSE
         pop     hl
+
+    ;; preserve reasonable amount of current machine state (for Quit functionality)
+        ; the tilemode clip window and palette will be NOT restored, sorry
+        ld      hl,preserved
+        ld      b,S_PRESERVE/2
+.preserveStateLoop:
+        ld      a,(hl)
+        inc     hl
+        call    readNextReg2A
+        ld      (hl),a
+        inc     hl
+        djnz    .preserveStateLoop
+        ; patch the turbo_07 and tile_xofs_msb_2F values to clear reserved bits
+        ld      a,(preserved.turbo_07)
+        and     3
+        ld      (preserved.turbo_07),a
+        ld      a,(preserved.tile_xofs_msb_2F)
+        and     3
+        ld      (preserved.tile_xofs_msb_2F),a
 
     ;; parse the arguments on command line (HL = arguments)
         ; no options implemented yet
@@ -236,18 +236,7 @@ start:
         ld      bc,(128-24)*32
         ldir
 
-    ;; set Tilemode 80x32 (640x256x4)
-        ; enter it in a way to make it possible to restore the original mode completely
-        ; i.e. read old_$69 and do $69=0 (layer2 off, bank 5 ULA, no timex mode)
-        ; preserve also the $6x tilemap registers and set my tilemap mode
-        ; preserve tilemap clip window, reset it to full res
-        ; preserve layer priorities, set ula (tiles) on top to be sure
-        ; disable ULA pixels? (is it part of tile $6x?)
-        ; preserve also transparency[global,tiles], transparency fallback colour
-
-        ;FIXME all the preservations
-
-        ; set up the tilemode and machine state
+    ;; set Tilemode 80x32 (640x256x4) and other state of machine
         nextreg TURBO_CONTROL_NR_07,3               ; 28Mhz mode
         nextreg SPRITE_CONTROL_NR_15,%000'100'00    ; layer priority: USL
         nextreg TRANSPARENCY_FALLBACK_COL_NR_4A,0   ; black transparency fallback color
@@ -458,12 +447,27 @@ HandleControls:
 .YwasPressed:
         djnz    .notQuitPending
     ; Quit confirmed
-/*
-        ; when "quit" is requested, restore tilemap mode to previous values and do
-        ; classic ULA CLS (shouldn't hurt even if the user was in different mode)
-        ; and return.
-*/
-        ;FIXME all
+        ; do classic ULA CLS (destroys the tile map+font)
+        ; (in other modes the result is hopefully acceptable any way)
+        ld      hl,$4000
+        ld      de,$4001
+        ld      bc,32*24*8
+        ld      (hl),l
+        ldir
+        ld      (hl),$38                ; white paper + black ink
+        ld      bc,32*24-1
+        ldir
+        ; restore the machine state (reasonably enough)
+        ld      hl,preserved
+        ld      b,S_PRESERVE/2
+.restoreStateLoop:
+        ld      a,(hl)
+        inc     hl
+        ld      (.nr),a                 ; self-modify `nextreg $nn,a` instruction
+        ld      a,(hl)
+        inc     hl
+.nr=$+2 nextreg $00,a
+        djnz    .restoreStateLoop
     ;; return to NextZXOS with "no error"
     ; - CF=0 when exiting (CF=1 A=esx_err, CF=1, A=0, HL="dc" custom error string)
         pop     bc          ; remove return address to main loop (to return to NextZXOS)
@@ -527,12 +531,10 @@ EdgesData:
 
 state:      S_STATE     {0, 0, 0}
 
-debugCfgName:
-        DZ      "test.cfg"
-        DB      32|128          ; bit7 terminated for UI of .displayedge tool
+preserved:  S_PRESERVE
 
-testBackupFilename:
-        DZ      "test.bak"
+backupFilename:
+        DZ      "/sys/displayedge.bak"      ; zero terminated for esxDOS
 
 ;-------------------------------
 readNextReg2A:
@@ -555,9 +557,8 @@ readNextReg2A:
 DidVideoModeChange:
 ; returns ZF=1 when no change happened, ZF=0 when changed
         call    dspedge.DetectMode  ; A = 0..8 current mode number
-.oM=$+1 cp      dspedge.MODE_COUNT
-        ret     z
-        ld      (.oM),a
+.oM=$+1 cp      dspedge.MODE_COUNT  ; self-modify storage of previous mode
+        ld      (.oM),a             ; reset "old Mode" value
         ret
 
 ;-------------------------------
@@ -668,18 +669,18 @@ SaveCfgFile:
         rra
         jr      c,.skipRenameAndOpen
         ; delete old backup first (if it exists)
-        ld      a,'*'
-        ld      hl,testBackupFilename
+        ld      a,'$'
+        ld      hl,backupFilename
         ESXDOS  F_UNLINK                ; don't even check for the error here
         ; rename the current CFG file to backup file
-        ld      a,'*'
+        ld      a,'$'
         ld      hl,CFG_FILENAME
-        ld      de,testBackupFilename
+        ld      de,backupFilename
         ESXDOS  F_RENAME
         jr      c,.skipRenameAndOpen    ; in case renaming of old file fails, try at least save
         ; fopen the backup file for reading the original data
-        ld      a,'*'
-        ld      hl,testBackupFilename
+        ld      a,'$'
+        ld      hl,backupFilename
         ld      b,$01           ; read-only
         ESXDOS  F_OPEN
         jr      c,.skipRenameAndOpen    ; in case old file fopen fails, try at least save
@@ -693,7 +694,7 @@ SaveCfgFile:
         rl      c               ; remember Fc in C
     ; open new cfg file for write
         push    bc
-        ld      a,'*'
+        ld      a,'$'
         ld      hl,CFG_FILENAME
         ld      b,$02+$0C       ; +write, +create_or_truncate
         ESXDOS  F_OPEN
