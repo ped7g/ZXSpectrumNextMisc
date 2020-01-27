@@ -3,13 +3,58 @@
 You can include the file "displayedge_rt.i.asm" in your own project and call the provided
 API calls to read the user's configuration.
 
-The details about API/usage will be documented later, at this moment this is work-in-progress,
-still prototyping the whole functionality (although the read+parse functionality is already
-implemented and if you are not afraid to check the source of the dot command tool, it should
-be quite straightforward how to use the "runtime" code in your own app).
-
-The cfg file is ordinary ASCII text file, see included test.cfg for details, so you can
+The cfg file is ordinary ASCII text file, see included test.cfg for details, so user can
 also edit the values in any text editor.
+
+## using "runtime" as source code included into your project
+
+If you are using sjasmplus, you can use the runtime library like this:
+
+        ORG xyz     ; where you want to place the runtime code
+        INCLUDE "displayedge_rt.i.asm"
+
+        ; ... in data area, reserve space ...
+    DisplayMarginsArray:    DS      dspedge.S_MARGINS * dspedge.MODE_COUNT  ; 4 * 9 = 36
+            ; if the app reacts dynamically to video mode changes, preserve this array
+
+                            ALIGN   256
+    ParsingBuffer:          DS      256     ; 256B buffer for parsing file, aligned ($xx00)
+            ; this buffer is used temporarily by ParseCfgFile and can be re-used afterward
+
+        ; .. in your init code, when starting the app ...
+            ld      hl,dspedge.defaultCfgFileName
+            ld      de,DisplayMarginsArray
+            ld      bc,ParsingBuffer
+            call    dspedge.ParseCfgFile
+            jr      c,someEsxError          ; A = esx error number
+
+        ; .. in your gfx init code or mainloop (if you watch for mode changes)
+            call    dspedge.DetectMode      ; A = current video mode
+            ; (optional) check if mode did change, or you need to init margins
+            call    dspedge.GetMargins      ; B C D E = left right top bottom
+            ; if the mode is not stored in the file yet, 4x 255 is returned
+
+            ; use the values to adjust your drawing routines and screen layout
+
+You can also check the `displayedge.asm` of the dot command to see the runtime code
+in the action.
+
+## using "runtime" as binary library in your project
+
+Use sjasmplus to build the binary (set the ORG address to what you need):
+
+    sjasmplus -DDISPLAYEDGE_ORG_ADR=0x8000 --exp=displayedge_rt.exp displayedge_rt.i.asm
+
+This will produce the `displayedge_rt.bin` and `displayedge_rt.exp` files, which you
+can then use in your favourite assembler, for example in sjasmplus it would look like:
+
+        INCLUDE "displayedge_rt.exp"        ; include the symbol values
+        ORG dspedge.Begin                   ; DISPLAYEDGE_ORG_ADR
+        INCBIN "displayedge_rt.bin"         ; include the machine code of library
+
+        ; the actual usage will be similar to the example above
+        ; just adjust syntax for your assembler
+
 
 # ZXNext dot command DISPLAYEDGE to edit "sys/displayedge.cfg" visually
 

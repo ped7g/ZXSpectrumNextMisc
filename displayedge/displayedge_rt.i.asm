@@ -3,7 +3,7 @@
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ;
 ; Runtime functions to read config file from system, detect video mode and figure out
-; user's settings for current mode (or when mode did change)
+; user's settings for current mode
 ;
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.14.0+)
 ;
@@ -18,6 +18,7 @@
 ; the export file (--exp sjasmplus option) to call the binary functions.
 ;
 ; Changelist:
+; v1.1  27/01/2020 P7G    Adding GetMargins API and improving docs about usage
 ; v1    25/01/2020 P7G    First working version, before public test
 ; v0    18/01/2020 P7G    Initial version (unfinished)
 ;
@@ -25,9 +26,10 @@
 ; # API (list of functions), all symbols inside "dspedge" module:
 ; ReadNextReg           - reads nextreg A into A (`-DUSE_TO_READ_NEXT_REG=<yours>` if you have own)
 ; DetectMode            - returns dspedge.MODE_* value (current display mode)
-; defaultCfgFileName    - default CFG filename: "/sys/displayedge.cfg",0
+; GetMargins            - returns already parsed margins for desired mode
 ; SanitizeMarginValue   - A value clamped to 0..31 (32..127 -> 31, 128..255 -> 0)
 ; ParseCfgFile          - will parse values from provided CFG file into memory
+; defaultCfgFileName    - default CFG filename: "/sys/displayedge.cfg",0
 ;-------------------------------
 
     ; switch sjasmplus to correct syntax variant
@@ -38,35 +40,6 @@
     IFDEF DISPLAYEDGE_ORG_ADR
         ORG DISPLAYEDGE_ORG_ADR
         OUTPUT "displayedge_rt.bin"
-
-        ; when assembling with DISPLAYEDGE_ORG_ADR defined, produce also export file
-        ; use "--exp=displayedge_rt.exp" to define the export name on command line
-        EXPORT dspedge.Begin
-        IFNDEF USE_TO_READ_NEXT_REG
-            EXPORT dspedge.ReadNextReg
-        ENDIF
-        EXPORT dspedge.DetectMode
-        EXPORT dspedge.defaultCfgFileName
-        EXPORT dspedge.SanitizeMarginValue
-        EXPORT dspedge.ParseCfgFile
-        EXPORT dspedge.End
-        ; video modes constants
-        EXPORT dspedge.MODE_HDMI_50
-        EXPORT dspedge.MODE_ZX48_50
-        EXPORT dspedge.MODE_ZX128_50
-        EXPORT dspedge.MODE_ZX128P3_50
-        EXPORT dspedge.MODE_HDMI_60
-        EXPORT dspedge.MODE_ZX48_60
-        EXPORT dspedge.MODE_ZX128_60
-        EXPORT dspedge.MODE_ZX128P3_60
-        EXPORT dspedge.MODE_PENTAGON
-        EXPORT dspedge.MODE_COUNT       ; number of different modes
-        ; S_MARGINS structure
-        EXPORT dspedge.S_MARGINS        ; length of structure
-        EXPORT dspedge.S_MARGINS.L      ; offset Left-margin pixels
-        EXPORT dspedge.S_MARGINS.R      ; offset Right-margin pixels
-        EXPORT dspedge.S_MARGINS.T      ; offset Top-margin pixels
-        EXPORT dspedge.S_MARGINS.B      ; offset Bottom-margin pixels
     ENDIF
 
 Begin:
@@ -121,7 +94,7 @@ DetectMode:
         ; Uses:
         ;       B, side effect: selects NextReg $11 or $03 on I/O port
 
-                ;; read current configuration from NextRegs and convert it to 0..8 value
+            ; read current configuration from NextRegs and convert it to 0..8 value
                 ; read 50Hz/60Hz info
                 ld      a,$05 ; PERIPHERAL_1_NR_05
                 call    USE_TO_READ_NEXT_REG
@@ -149,11 +122,50 @@ DetectMode:
                 ld      a,MODE_PENTAGON
                 ret
 
-defaultCfgFileName:
-                DZ      "/sys/displayedge.cfg"      ; zero terminated for esxDOS
-                DB      32|128          ; bit7 terminated for UI of .displayedge tool
+;;----------------------------------------------------------------------------------------
+;; Retrieve parsed margin values for particular mode
+
+GetMargins:
+        ; Input:
+        ;       A = dspedge.MODE_* value, which mode margins should be returned
+        ;       DE = S_MARGINS[MODE_COUNT] array (4 * 9 = 36 bytes) - parsed data by ParseCfgFile
+        ; Output:
+        ;       BCDE = left, right, top, bottom margin values
+        ;              (255, 255, 255, 255 = "not in file" or "invalid mode index")
+        ; Uses:
+        ;       A
+
+                cp      MODE_COUNT
+                jr      nc,.invalidModeIndex
+            ; valid mode index, fetch the data from array (not sanitizing them *again*)
+                rlca
+                rlca
+                add     de,a            ; DE = DE + 4*mode_index
+                push    hl
+                ex      de,hl
+                ldi     b,(hl)          ; fake: ld b,(hl) : inc hl  ; LEFT margin
+                ldi     c,(hl)          ; fake: ld c,(hl) : inc hl  ; RIGHT margin
+                ldi     d,(hl)          ; fake: ld d,(hl) : inc hl  ; TOP margin
+                ld      e,(hl)                                      ; BOTTOM margin
+                pop     hl
+                ret
+            ; for invalid index return 4x 255
+.invalidModeIndex:
+                ld      bc,$FFFF
+                push    bc
+                pop     de
+                ret
+
+;;----------------------------------------------------------------------------------------
+;; Sanitize margin value in A, turning it into 0..31 value.
+;; Values 32..127 will become 31, 128..255 (-128..-1) will become 0.
 
 SanitizeMarginValue:
+        ; Input:
+        ;       A = margin value to sanitize
+        ; Output:
+        ;       A = sanitized margin value
+
             ; sanitize the value in A
                 test    -32
                 ret     z               ; value OK
@@ -380,6 +392,10 @@ isKeyword:
                 inc     l
                 jr      .matchLoop
 
+defaultCfgFileName:
+                DZ      "/sys/displayedge.cfg"      ; zero terminated for esxDOS
+                DB      32|128          ; bit7 terminated for UI of .displayedge tool
+
 keywordsModes:                      ; (less than 128 chars per keyword)
 .h_5            DZ      'hdmi_50'
 .z4_5           DZ      'zx48_50'
@@ -397,6 +413,35 @@ End:
 
     IFDEF DISPLAYEDGE_ORG_ADR
         OUTEND
+
+        ; when assembling with DISPLAYEDGE_ORG_ADR defined, produce also export file
+        ; use "--exp=displayedge_rt.exp" to define the export name on command line
+        EXPORT dspedge.Begin
+        IFNDEF USE_TO_READ_NEXT_REG
+            EXPORT dspedge.ReadNextReg
+        ENDIF
+        EXPORT dspedge.DetectMode
+        EXPORT dspedge.defaultCfgFileName
+        EXPORT dspedge.SanitizeMarginValue
+        EXPORT dspedge.ParseCfgFile
+        EXPORT dspedge.End
+        ; video modes constants
+        EXPORT dspedge.MODE_HDMI_50
+        EXPORT dspedge.MODE_ZX48_50
+        EXPORT dspedge.MODE_ZX128_50
+        EXPORT dspedge.MODE_ZX128P3_50
+        EXPORT dspedge.MODE_HDMI_60
+        EXPORT dspedge.MODE_ZX48_60
+        EXPORT dspedge.MODE_ZX128_60
+        EXPORT dspedge.MODE_ZX128P3_60
+        EXPORT dspedge.MODE_PENTAGON
+        EXPORT dspedge.MODE_COUNT       ; number of different modes
+        ; S_MARGINS structure
+        EXPORT dspedge.S_MARGINS        ; length of structure
+        EXPORT dspedge.S_MARGINS.L      ; offset Left-margin pixels
+        EXPORT dspedge.S_MARGINS.R      ; offset Right-margin pixels
+        EXPORT dspedge.S_MARGINS.T      ; offset Top-margin pixels
+        EXPORT dspedge.S_MARGINS.B      ; offset Bottom-margin pixels
     ENDIF
 
     OPT pop     ; restore original configuration of sjasmplus syntax
