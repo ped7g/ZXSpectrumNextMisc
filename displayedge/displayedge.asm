@@ -10,14 +10,12 @@
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.14.0+)
 ; For "testing" snapshot for emulators use option: -DTESTING (or uncomment define below)
 ;
-; (TODO verify paths and if the documented filenames work)
 ; Reads /sys/displayedge.cfg by default, and allows user to adjust the configuration for
 ; current video mode (system F3 key to switch between 50/60 Hz => user can define both).
 ;
-; There will be another set of asm source files in https://github.com/ped7g/ZXSpectrumNextMisc
-; repository (hopefully it will become part of main distribution over time as well) to
-; read the configuration file back and have simple API to detect the current mode and
-; read back the user defined values. (TODO)
+; There is displayedge_rt.i.asm source file with "runtime" functions to read
+; the configuration file back and have simple API to detect the current mode and
+; read back the user defined values.
 ;
 ; command line options:
 ; TODO add cfg filename, and maybe CLI edit mode to write values for particular mode
