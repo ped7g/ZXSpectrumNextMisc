@@ -393,7 +393,7 @@ isKeyword:
                 jr      .matchLoop
 
 defaultCfgFileName:
-                DZ      "/sys/displayedge.cfg"      ; zero terminated for esxDOS
+                DZ      "/sys/env.cfg"  ; zero terminated for esxDOS
                 DB      32|128          ; bit7 terminated for UI of .displayedge tool
 
 keywordsModes:                      ; (less than 128 chars per keyword)

@@ -1,10 +1,10 @@
-# "runtime" library to read+parse the "sys/displayedge.cfg"
+# "runtime" library to read+parse the "sys/end.cfg"
 
 You can include the file "displayedge_rt.i.asm" in your own project and call the provided
 API calls to read the user's configuration.
 
 The cfg file is ordinary ASCII text file, see included test.cfg for details, so user can
-also edit the values in any text editor.
+also edit the values in any text editor (recommended end-of-line is MS-DOS "CRLF").
 
 ## using "runtime" as source code included into your project
 
@@ -22,11 +22,26 @@ If you are using sjasmplus, you can use the runtime library like this:
             ; this buffer is used temporarily by ParseCfgFile and can be re-used afterward
 
         ; .. in your init code, when starting the app ...
-            ld      hl,dspedge.defaultCfgFileName
-            ld      de,DisplayMarginsArray
-            ld      bc,ParsingBuffer
-            call    dspedge.ParseCfgFile
-            jr      c,someEsxError          ; A = esx error number
+
+            ; optional - read local cfg in the app directory (if your sw supports local config)
+                ld      hl,yourAppLocalCfgName
+                ld      de,DisplayMarginsArray
+                ld      bc,ParsingBuffer
+                call    dspedge.ParseCfgFile    ; set array to -1 values even when error happens
+                jr      nc,NoEsxError_allDone
+                ; esx error, check if it is "file does not exist" - no local config
+                cp      5                       ; esx_enoent
+                jr      nz,someEsxError         ; some other error happened
+                ; continue to read the default global config instead
+
+            ; regular global config
+
+                ; read default /sys/env.cfg file
+                ld      hl,dspedge.defaultCfgFileName
+                ld      de,DisplayMarginsArray
+                ld      bc,ParsingBuffer
+                call    dspedge.ParseCfgFile    ; set array to -1 values even when error happens
+                jr      c,someEsxError          ; A = esx error number
 
         ; .. in your gfx init code or mainloop (if you watch for mode changes)
             call    dspedge.DetectMode      ; A = current video mode
@@ -56,7 +71,7 @@ can then use in your favourite assembler, for example in sjasmplus it would look
         ; just adjust syntax for your assembler
 
 
-# ZXNext dot command DISPLAYEDGE to edit "sys/displayedge.cfg" visually
+# ZXNext dot command DISPLAYEDGE to edit "sys/env.cfg" visually
 
 This is "dot command" for NextZXOS running at TBBlue (aka ZXNext) board (does use tiles
 video-mode for graphics).
