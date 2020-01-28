@@ -18,6 +18,8 @@
 ; the export file (--exp sjasmplus option) to call the binary functions.
 ;
 ; Changelist:
+; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
+;                           keywords prefix "edge_", the default cfg: /sys/env.cfg
 ; v1.1  27/01/2020 P7G    Adding GetMargins API and improving docs about usage
 ; v1    25/01/2020 P7G    First working version, before public test
 ; v0    18/01/2020 P7G    Initial version (unfinished)
@@ -29,7 +31,7 @@
 ; GetMargins            - returns already parsed margins for desired mode
 ; SanitizeMarginValue   - A value clamped to 0..31 (32..127 -> 31, 128..255 -> 0)
 ; ParseCfgFile          - will parse values from provided CFG file into memory
-; defaultCfgFileName    - default CFG filename: "/sys/displayedge.cfg",0
+; defaultCfgFileName    - default CFG filename: "/sys/env.cfg",0
 ;-------------------------------
 
     ; switch sjasmplus to correct syntax variant

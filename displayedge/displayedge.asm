@@ -4,13 +4,13 @@
 ;
 ; Displays green rectangle in tilemap 640x256x4 mode at the user defined edge and let
 ; the user further adjust per-pixel which pixels are well visible on his display. The
-; final configuration can be then stored in /sys/displayedge.cfg file, to be readable
+; final configuration can be then stored in /sys/env.cfg file, to be readable
 ; by any other application. The config is for full width-pixel only (320x256 res)!
 ;
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.14.0+)
 ; For "testing" snapshot for emulators use option: -DTESTING (or uncomment define below)
 ;
-; Reads /sys/displayedge.cfg by default, and allows user to adjust the configuration for
+; Reads /sys/env.cfg by default, and allows user to adjust the configuration for
 ; current video mode (system F3 key to switch between 50/60 Hz => user can define both).
 ;
 ; There is displayedge_rt.i.asm source file with "runtime" functions to read
@@ -18,21 +18,18 @@
 ; read back the user defined values.
 ;
 ; command line options:
-; TODO add cfg filename, and maybe CLI edit mode to write values for particular mode
-; TODO without interactive part
+; TODO add cfg filename (maybe "--clone" which will copy current global env.cfg values)
+; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
+; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
+;                           keywords prefix "edge_", CRLF eols preferred, calc bak filename
+;                           the default cfg filename is now /sys/env.cfg
 ; v1    25/01/2020 P7G    First fully working version, before public test
 ; v0    16/01/2020 P7G    Initial version (unfinished)
 ;
 ;-------------------------------
-; See example of CFG file in the file "test.cfg" in the project git repo. Syntax rules:
-;; full comment line starts with semicolon, only ASCII chars allowed, max line length 250
-;; otherwise (non-ASCII byte, longer line) parser may break and skip rest of file
-;; the recognized video-mode names: "hdmi", "zx48", "zx128", "zx128p3", "pentagon" (lowercase!)
-;; the video-mode name is then appended by Hz: "_50", "_60" (pentagon is without Hz part)
-;; the value is four decimal integers split by comma/space: left right top bottom of display
-;; the values are number of pixels (in 320x256 resolution) not visible to user
+; Syntax rules: See the example+test file "test.cfg" in the project git repo.
 ;-------------------------------
 
 ;-------------------------------
