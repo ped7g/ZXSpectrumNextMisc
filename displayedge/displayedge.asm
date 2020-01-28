@@ -179,6 +179,7 @@ ReadMarginsArray:   DS      dspedge.S_MARGINS * dspedge.MODE_COUNT
 ParsingBuffer:      DS      256
 WritingBuffer:      DS      256
 WritingBuffer2:     DS      256
+BackupFilename:     DS      256
 
 lastReserved:   ASSERT  lastReserved < $3D00 && last < $3D00
 
@@ -531,8 +532,9 @@ state:      S_STATE     {0, 0, 0}
 
 preserved:  S_PRESERVE
 
-backupFilename:
-        DZ      "/sys/displayedge.bak"      ; zero terminated for esxDOS
+backupFilenameExtension:
+        DB      ".bak",0
+backupFilenameExtensionSZ: EQU $ - backupFilenameExtension
 
 ;-------------------------------
 readNextReg2A:
@@ -666,19 +668,34 @@ SaveCfgFile:
         ld      a,(state.noFileFound)   ; $FF when file was not found
         rra
         jr      c,.skipRenameAndOpen
+        ; create backup filename from original
+        ld      de,BackupFilename
+        ld      hl,CFG_FILENAME
+        ld      bc,124<<8|$FF           ; B = max chars to copy from original filename (C=junk food for LDI)
+.copyFilenameLoop:
+        ldi
+        ld      a,(hl)
+        or      a
+        jr      z,.EndOfFilenameFound
+        djnz    .copyFilenameLoop
+.EndOfFilenameFound:                    ; file is copied (either as whole or truncated to max chars
+        ; add ".bak" to original name
+        ld      hl,backupFilenameExtension
+        ld      bc,backupFilenameExtensionSZ
+        ldir
         ; delete old backup first (if it exists)
         ld      a,'$'
-        ld      hl,backupFilename
+        ld      hl,BackupFilename
         ESXDOS  F_UNLINK                ; don't even check for the error here
         ; rename the current CFG file to backup file
         ld      a,'$'
         ld      hl,CFG_FILENAME
-        ld      de,backupFilename
+        ld      de,BackupFilename
         ESXDOS  F_RENAME
         jr      c,.skipRenameAndOpen    ; in case renaming of old file fails, try at least save
         ; fopen the backup file for reading the original data
         ld      a,'$'
-        ld      hl,backupFilename
+        ld      hl,BackupFilename
         ld      b,$01           ; read-only
         ESXDOS  F_OPEN
         jr      c,.skipRenameAndOpen    ; in case old file fopen fails, try at least save
