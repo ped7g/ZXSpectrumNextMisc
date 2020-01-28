@@ -895,11 +895,12 @@ ByTxt:
 
 NewFileCommentsTxt:
         DB      "; Visible display edge config",10
-        DB      "; produced by .displayedge",10
-        DB      "; recognized video modes:",10
-        DB      "; hdmi, zx48, zx128, zx128p3",10
+        DB      "; by .displayedge, recognized",10
+        DB      "; var names (lowercase!):",10
+        DB      "; edge_hdmi, edge_zx48,",10
+        DB      "; edge_zx128, edge_zx128p3",10
         DB      "; with _50 / _60 suffix for Hz",10
-        DB      "; pentagon (all lowercase)",10
+        DB      "; edge_pentagon",10
         DB      "; Values: left,right,top,bottom",10
         DB      10,0
 

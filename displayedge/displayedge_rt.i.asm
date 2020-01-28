@@ -397,15 +397,15 @@ defaultCfgFileName:
                 DB      32|128          ; bit7 terminated for UI of .displayedge tool
 
 keywordsModes:                      ; (less than 128 chars per keyword)
-.h_5            DZ      'hdmi_50'
-.z4_5           DZ      'zx48_50'
-.z1_5           DZ      'zx128_50'
-.z3_5           DZ      'zx128p3_50'
-.h_6            DZ      'hdmi_60'
-.z4_6           DZ      'zx48_60'
-.z1_6           DZ      'zx128_60'
-.z3_6           DZ      'zx128p3_60'
-.p              DZ      'pentagon'
+.h_5            DZ      'edge_hdmi_50'
+.z4_5           DZ      'edge_zx48_50'
+.z1_5           DZ      'edge_zx128_50'
+.z3_5           DZ      'edge_zx128p3_50'
+.h_6            DZ      'edge_hdmi_60'
+.z4_6           DZ      'edge_zx48_60'
+.z1_6           DZ      'edge_zx128_60'
+.z3_6           DZ      'edge_zx128p3_60'
+.p              DZ      'edge_pentagon'
                 DB      0           ; end of keywords
 
 End:
