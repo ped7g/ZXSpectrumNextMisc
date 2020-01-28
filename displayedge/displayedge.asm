@@ -741,6 +741,12 @@ SaveCfgFile:
         cp      13
         jr      nz,.dismissLineLoop
 .dismissEolFound:
+        ; dismiss any further EOL char (eats whole CRLF, but also empty lines)
+        ld      a,(hl)              ; peekChar
+        cp      10
+        jr      z,.dismissLineLoop
+        cp      13
+        jr      z,.dismissLineLoop
         pop     bc
         jr      .ParseOldFileLoop   ; try next line (may start with keyword)
 .noKeywordYet:
@@ -891,18 +897,18 @@ SaveModeData:
 ModifiedByTxt:
         DB      " ; modified"
 ByTxt:
-        DB      " ; by .displayedge", 10, 0
+        DB      " ; by .displayedge", 13, 10, 0
 
 NewFileCommentsTxt:
-        DB      "; Visible display edge config",10
-        DB      "; by .displayedge, recognized",10
-        DB      "; var names (lowercase!):",10
-        DB      "; edge_hdmi, edge_zx48,",10
-        DB      "; edge_zx128, edge_zx128p3",10
-        DB      "; with _50 / _60 suffix for Hz",10
-        DB      "; edge_pentagon",10
-        DB      "; Values: left,right,top,bottom",10
-        DB      10,0
+        DB      "; Visible display edge config", 13, 10
+        DB      "; by .displayedge, recognized", 13, 10
+        DB      "; var names (lowercase!):", 13, 10
+        DB      "; edge_hdmi, edge_zx48,", 13, 10
+        DB      "; edge_zx128, edge_zx128p3", 13, 10
+        DB      "; with _50 / _60 suffix for Hz", 13, 10
+        DB      "; edge_pentagon", 13, 10
+        DB      "; Values: left,right,top,bottom", 13, 10
+        DB      13, 10, 0
 
 ;-------------------------------
 RedrawUiControls:
