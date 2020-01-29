@@ -1,11 +1,11 @@
 SJASMPLUS = sjasmplus
-SJASMPLUSFLAGS = --msg=war --lst --lstlab --nologo
+SJASMPLUSFLAGS = --msg=war --nologo
 INCLUDE_FILES = $(wildcard *.i.asm)
 
 # try to assemble the "runtime" file as standalone file (as if included elsewhere)
 # then create the binary of the dot command
 DISPLAYEDGE: displayedge.asm $(INCLUDE_FILES) Makefile
-	$(SJASMPLUS) --zxnext $(SJASMPLUSFLAGS) displayedge.asm
+	$(SJASMPLUS) --zxnext $(SJASMPLUSFLAGS) --lst --lstlab displayedge.asm
 
 DISPLAYEDGE.SNA: displayedge.asm $(INCLUDE_FILES) Makefile
 	$(SJASMPLUS) --zxnext=cspect -DTESTING $(SJASMPLUSFLAGS) displayedge.asm

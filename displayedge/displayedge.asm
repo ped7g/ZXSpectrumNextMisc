@@ -192,7 +192,6 @@ start:
         push    hl
         rst $08 : db M_GETHANDLE
         rst $08 : db F_CLOSE
-        pop     hl
 
     ;; preserve reasonable amount of current machine state (for Quit functionality)
         ; the tilemode clip window and palette will be NOT restored, sorry
@@ -214,6 +213,7 @@ start:
         ld      (preserved.tile_xofs_msb_2F),a
 
     ;; parse the arguments on command line (HL = arguments)
+        pop     hl
         ; no options implemented yet
 
     ;; page-in the bank5 explicitly (just to be sure it's Bank 5 there)
