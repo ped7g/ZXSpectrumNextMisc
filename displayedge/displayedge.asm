@@ -343,9 +343,10 @@ HandleControls:
         ; O,P select edge to edit (CCWS/CWS)
         ld      a,~(1<<5)           ; sixth row YUIOP
         in      a,(254)
-        cpl
         and     3
-        jr      nz,.edgeSelector    ; A=%10 for "O", %01 for "P" (or %11 for both)
+        rra                         ; Fc=!key_P, A=!key_O
+        sbc     0                   ; A = "O+P" or no_key: 0 | key_P: +1 | key_O: -1
+        jr      nz,.edgeSelector
         ; HJKL to adjust edge size
         ld      a,~(1<<6)           ; seventh row HJKLenter
         in      a,(254)
@@ -402,8 +403,6 @@ HandleControls:
         ret
 
 .edgeSelector:
-        and     2       ; 2 for O/O+P, 0 for P
-        inc     a       ; 3 for O/O+P, 1 for P (technically 3 is like -1)
         ld      hl,state.edge
         add     a,(hl)
         and     3
