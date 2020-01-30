@@ -22,6 +22,7 @@
 ; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
+; v1.3  30/01/2020 P7G    Check for Z80N CPU at start, better O/P keys handler
 ; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
 ;                           keywords prefix "edge_", CRLF eols preferred, calc bak filename
 ;                           the default cfg filename is now /sys/env.cfg
@@ -100,6 +101,7 @@ debounceKey         BYTE    0
 modified            BYTE    0   ; set if any of modes (even inactive) is modified
 noFileFound         BYTE    0
 esxErrorNo          BYTE    1
+argsPtr             WORD    0
     ENDS
 
     STRUCT S_PRESERVE
@@ -141,6 +143,7 @@ CHAR_ARROW_B        EQU     31
 
 ;-----------------------------------------------------------------------------
 ;-- ESX DOS functions
+M_DOSVERSION                    equ $88
 M_GETSETDRV                     equ $89     ; get current drive (or use A='*'/'$' for current/system drive!)
 M_GETHANDLE                     equ $8D     ; get file handle of current dot command
 M_GETERR                        equ $93
@@ -188,8 +191,23 @@ lastReserved:   ASSERT  lastReserved < $3D00 && last < $3D00
 __bin_b DISP    DISP_ADDRESS
 
 start:
+        ld      (state.argsPtr),hl  ; preserve pointer to arguments
+    ;; detect running environment (bail out if it's not Z80N)
+        xor     a
+        inc     a               ; A=1, Fc=0
+        mirror  a : nop : nop   ; $01 -> $80 on Z80N CPU, maybe "inc h" on Z80
+                                ; something else on Z380 and similar (but not mirror A)
+        rra
+        jr      nc,.z80n_opcode_detected
+        ; A=0, Fc=1 on regular Z80 -> report wrong HW
+        ld      hl,.ErrTxt_NotZ80N
+        ret
+.ErrTxt_NotZ80N:
+        DC      "Z80N CPU required"
+
+.z80n_opcode_detected:
+
     ;; close the file handle of the dot command itself
-        push    hl
         rst $08 : db M_GETHANDLE
         rst $08 : db F_CLOSE
 
@@ -212,8 +230,8 @@ start:
         and     3
         ld      (preserved.tile_xofs_msb_2F),a
 
-    ;; parse the arguments on command line (HL = arguments)
-        pop     hl
+    ;; parse the arguments on command line
+        ;ld      hl,(state.argsPtr)
         ; no options implemented yet
 
     ;; page-in the bank5 explicitly (just to be sure it's Bank 5 there)
