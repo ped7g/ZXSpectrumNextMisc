@@ -46,6 +46,8 @@ If you are using sjasmplus, you can use the runtime library like this:
         ; .. in your gfx init code or mainloop (if you watch for mode changes)
             call    dspedge.DetectMode      ; A = current video mode
             ; (optional) check if mode did change, or you need to init margins
+            ; A = video mode you want to get margins for
+            ld      de,DisplayMarginsArray
             call    dspedge.GetMargins      ; B C D E = left right top bottom
             ; if the mode is not stored in the file yet, 4x 255 is returned
 
