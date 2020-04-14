@@ -1,4 +1,4 @@
-# "runtime" library to read+parse the "sys/end.cfg"
+# "runtime" library to read+parse the "sys/env.cfg"
 
 You can include the file "displayedge_rt.i.asm" in your own project and call the provided
 API calls to read the user's configuration.
