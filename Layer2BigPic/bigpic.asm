@@ -2,14 +2,14 @@
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ; requires ZX Spectrum Next with core3.1.5+
 ;
-; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.15.0+)
+; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.14.4+)
 ; Does use imagemagick "convert" tool to prepare image data for direct INCBIN
 ; The Makefile has the full-rebuild instructions
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
 
-    MMU 0 n, 9*2, $0000     ; include bigpic data into 16ki banks 9-28 (8ki pages 18-57)
+    MMU 0 n, 9*2 : ORG 0    ; include bigpic data into 16ki banks 9-28 (8ki pages 18-57)
 bigpic_top:
     INCBIN "bigpic_top.tga", 0x12 + 3*256, 256*640
 bigpic_bot:

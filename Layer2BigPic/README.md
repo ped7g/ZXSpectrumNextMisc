@@ -15,9 +15,7 @@ HDMI 50Hz has enough time to do +16px horizontal scroll per frame.
 
 ## how to build it
 
-You will need [sjasmplus](https://github.com/z00m128/sjasmplus) (v1.15.0+, to be released
-hopefully soon, or build from the github master branch the work-in-progress version).
-(or break the 3-argument MMU command to 2-argument MMU + ORG supported by v1.14.5)
+You will need [sjasmplus](https://github.com/z00m128/sjasmplus) (v1.14.4+).
 
 Makefile is provided with extra build tasks if you want to do more things, to modify the
 image data you will need to provide 640x512 8bit indexed PNG in default Layer2 palette,
