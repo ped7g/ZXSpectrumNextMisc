@@ -1,4 +1,4 @@
-.PHONY: all clean gitrelease all_projects nexload2 displayedge
+.PHONY: all clean gitrelease all_projects nexload2 displayedge Layer2BigPic
 
 all:
 	TARGET=all $(MAKE) all_projects
@@ -12,10 +12,10 @@ gitrelease: clean
 
 ###############################################################
 # add all sub-projects as prerequisity here
-all_projects: nexload2 displayedge
+all_projects: nexload2 displayedge Layer2BigPic
 
 ###############################################################
 # rules for each sub-projects to build specific $(TARGET)
 
-nexload2 displayedge:
+nexload2 displayedge Layer2BigPic:
 	$(MAKE) --directory=$@ $(TARGET)
