@@ -1,1 +1,0 @@
-MONO_IOMAP=all mono ~/wine32/zx/CSpect/CSpect_current/CSpect.exe -tv -zxnext -s28 -w4 -brk -nextrom -mmc=tbblue.img
