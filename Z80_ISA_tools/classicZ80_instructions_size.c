@@ -9,12 +9,16 @@
 
 typedef uint8_t byte;
 
-const byte pattern1111[4] = { 1, 1, 1, 1 };
-const byte pattern1131[4] = { 1, 1, 3, 1 };
+const byte patternDataA[] = {
+    2, 1, 1, 1, 1, 3, 1, 1, 3, 3
+};
+
+#define pattern1111 (patternDataA + 1)
+#define pattern1131 (patternDataA + 3)
+#define pattern1311 (patternDataA + 4)
+#define pattern2111 (patternDataA + 0)
+#define pattern1133 (patternDataA + 6)
 const byte pattern1132[4] = { 1, 1, 3, 2 };
-const byte pattern1133[4] = { 1, 1, 3, 3 };
-const byte pattern1311[4] = { 1, 3, 1, 1 };
-const byte pattern2111[4] = { 2, 1, 1, 1 };
 const byte pattern2131[4] = { 2, 1, 3, 1 };
 const byte pattern2311[4] = { 2, 3, 1, 1 };
 const byte pattern2331[4] = { 2, 3, 3, 1 };
