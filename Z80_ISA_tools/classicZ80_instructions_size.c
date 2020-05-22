@@ -9,29 +9,17 @@
 
 typedef uint8_t byte;
 
-const byte patternDataA[] = {
-    2, 1, 1, 1, 1, 3, 1, 1, 3, 3
-};
+#define PACK_PATTERN_DATA(idx0, idx1, idx2, idx3) ((idx0) | ((idx1)<<2) | ((idx2)<<4) | ((idx3)<<6))
 
-#define pattern1111 (patternDataA + 1)
-#define pattern1131 (patternDataA + 3)
-#define pattern1311 (patternDataA + 4)
-#define pattern2111 (patternDataA + 0)
-#define pattern1133 (patternDataA + 6)
-const byte pattern1132[4] = { 1, 1, 3, 2 };
-const byte pattern2131[4] = { 2, 1, 3, 1 };
-const byte pattern2311[4] = { 2, 3, 1, 1 };
-const byte pattern2331[4] = { 2, 3, 3, 1 };
-
-const byte* quartetsPatterns[16] = {
-    pattern1133, pattern1132,   // C0..CF (idx7 0..3)
-    pattern1132, pattern1132,   // D0..DF (idx7 0..3)
-    pattern1131, pattern1131,   // E0..EF (idx7 0..3)
-    pattern1131, pattern1131,   // F0..FF (idx7 0..3)
-    pattern1311, pattern1111,   // 00..0F (idx7 0..3)
-    pattern2311, pattern2111,   // 10..1F (idx7 0..3)
-    pattern2331, pattern2131,   // 20..2F (idx7 0..3)
-    pattern2331, pattern2131    // 30..3F (idx7 0..3)
+const byte quartetsPatterns[16] = {
+    PACK_PATTERN_DATA(1,1,3,3), PACK_PATTERN_DATA(1,1,3,2),     // C0..CF (idx7 0..3)
+    PACK_PATTERN_DATA(1,1,3,2), PACK_PATTERN_DATA(1,1,3,2),     // D0..DF (idx7 0..3)
+    PACK_PATTERN_DATA(1,1,3,1), PACK_PATTERN_DATA(1,1,3,1),     // E0..EF (idx7 0..3)
+    PACK_PATTERN_DATA(1,1,3,1), PACK_PATTERN_DATA(1,1,3,1),     // F0..FF (idx7 0..3)
+    PACK_PATTERN_DATA(1,3,1,1), PACK_PATTERN_DATA(1,1,1,1),     // 00..0F (idx7 0..3)
+    PACK_PATTERN_DATA(2,3,1,1), PACK_PATTERN_DATA(2,1,1,1),     // 10..1F (idx7 0..3)
+    PACK_PATTERN_DATA(2,3,3,1), PACK_PATTERN_DATA(2,1,3,1),     // 20..2F (idx7 0..3)
+    PACK_PATTERN_DATA(2,3,3,1), PACK_PATTERN_DATA(2,1,3,1)      // 30..3F (idx7 0..3)
 };
 
 byte opcodeSz(byte *b) {
@@ -68,5 +56,6 @@ byte opcodeSz(byte *b) {
     // 2331 .... | 2131 ....    ; 20..2F
     // 2331 .... | 2131 ....    ; 30..3F
     const byte octet = x0>>3;
-    return quartetsPatterns[octet][idx7];
+    const byte quartetData = quartetsPatterns[octet];
+    return (quartetData>>(idx7*2)) & 0x03;
 }
