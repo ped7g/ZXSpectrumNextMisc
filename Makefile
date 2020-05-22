@@ -1,4 +1,4 @@
-.PHONY: all clean gitrelease all_projects nexload2 displayedge Layer2BigPic
+.PHONY: all clean gitrelease all_projects nexload2 displayedge Layer2BigPic Z80_ISA_tools
 
 all:
 	TARGET=all $(MAKE) all_projects
@@ -12,10 +12,10 @@ gitrelease: clean
 
 ###############################################################
 # add all sub-projects as prerequisity here
-all_projects: nexload2 displayedge Layer2BigPic
+all_projects: nexload2 displayedge Layer2BigPic Z80_ISA_tools
 
 ###############################################################
 # rules for each sub-projects to build specific $(TARGET)
 
-nexload2 displayedge Layer2BigPic:
+nexload2 displayedge Layer2BigPic Z80_ISA_tools:
 	$(MAKE) --directory=$@ $(TARGET)

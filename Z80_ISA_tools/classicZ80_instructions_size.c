@@ -47,9 +47,9 @@ byte opcodeSz(byte *b) {
         return 1 + extraL + opcodeSz(b+1);      // +1 or +2 prefix of regular instruction
     }
 
-    byte x0 = b[0] + 0x40;
+    const byte x0 = b[0] + 0x40;
     if (0x80 <= x0) return 1;                   // all 0x40 .. 0xBF instructions
-    byte idx7 = x0 & 0x07;
+    const byte idx7 = x0 & 0x07;
     // for 4 == idx7: Cx..Fx have 3B (call cc), 0x..3x have 1B (inc/dec)
     if (0x04 == idx7) return (x0 < 0x40) ? 3 : 1;
     // for 5..7 idx7 the pattern is 1,2,1 (CD/DD/ED/FD are already processed)
@@ -63,6 +63,6 @@ byte opcodeSz(byte *b) {
     // 2311 .... | 2111 ....    ; 10..1F
     // 2331 .... | 2131 ....    ; 20..2F
     // 2331 .... | 2131 ....    ; 30..3F
-    byte octet = x0>>3;
+    const byte octet = x0>>3;
     return quartetsPatterns[octet][idx7];
 }
