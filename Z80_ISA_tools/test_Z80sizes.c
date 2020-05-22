@@ -27,7 +27,7 @@ int main(void) {
     // label header - ED prefix
     printf("\n   ");
     for (j = 0; j < 16; ++j) printf(" x%X", j);
-    printf(" - ED prefix\n");
+    printf(" - ED prefix - Z80N version\n");
     testOpcode[0] = 0xED;
     // table content
     for (i = 0; i < 16; ++i) {
