@@ -32,10 +32,12 @@ byte opcodeSz(byte *b) {
         }
         // IXY instructions
         if (0xDD == (b[1] & 0xDF)) return 1;    // prevent recursion for DD DD FD FD DD FD arrays
+        if (0xED == b[1]) return 1;             // ED prefix invalidates DD/FD prefix
         if (0xCB == b[1]) return 4;             // bit-prefix instruction
+        if (0x76 == b[1]) return 2;             // IXY prefixed `halt`
         byte extraL =   (0x34 <= b[1] && b[1] <= 0x36) ||   // inc/dec/ld "(hl)"
                         (0x70 <= b[1] && b[1] <= 0x77) ||   // ld (hl),r8
-                        (0x40 <= b[1] && b[1] <= 0xBF && 6 == (b[1] & 0x07));   // (hl)
+                        (0x40 <= b[1] && b[1] <= 0xBF && 6 == (b[1] & 0x07));   // ld r8,(hl), and/or/xor... (hl)
         return 1 + extraL + opcodeSz(b+1);      // +1 or +2 prefix of regular instruction
     }
 
