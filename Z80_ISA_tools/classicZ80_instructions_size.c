@@ -27,7 +27,6 @@ byte opcodeSz(byte *b) {
         if (0xCD == b[0]) return 3;             // call **
         if (0xED == b[0]) {                     // extended instructions
             if (0x43 == (b[1] & 0xC7)) return 4;// ld (**),r16, ld r16,(**)
-            //TODO Z80N extras not covered here
             return 2;                           // everything else
         }
         // IXY instructions
