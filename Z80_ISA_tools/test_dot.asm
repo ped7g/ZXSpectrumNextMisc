@@ -153,12 +153,14 @@ testChainedPrefix:
         djnz    .testLoop
         ret
 
+__GetZ80NOpcodeSize_INCLUDE_START:
     INCLUDE "Z80N_instructions_size.asm"
 ;GetZ80NOpcodeSize:
 ;; returns size of opcode in memory in bytes
 ;; In:  HL = address of opcode
 ;; Out: A = opcode size
 ;; Modifies: DE
+__GetZ80NOpcodeSize_INCLUDE_END:
 
 machineCode:
         BLOCK   5, 0
@@ -233,4 +235,5 @@ sna_start:
         jr      $
 
         SAVESNA "test.sna", sna_start
+        DISPLAY "code size of GetZ80NOpcodeSize include: ", /D, __GetZ80NOpcodeSize_INCLUDE_END-__GetZ80NOpcodeSize_INCLUDE_START
     ENDIF

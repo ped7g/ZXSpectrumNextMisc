@@ -2,7 +2,7 @@
 ;;
 ;; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ;;
-;; this is meant to be reasonably fast while also small+simple (size 180 bytes)
+;; this is meant to be reasonably fast while also small+simple (size 176 bytes)
 
     ; switch sjasmplus to correct syntax variant
     OPT push reset --zxnext --syntax=abfw
@@ -48,11 +48,10 @@ GetZ80NOpcodeSize:
         sub     $70-$34             ; A = b[1]-$70
         cp      $77-$70+1
         jr      c,.return3andDecHl  ; ($70 <= b[1] <= $77) -> "ld (ixy+*),r8"
-        add     $70-$40             ; A = b[1]-$40
-        cp      $BF-$40+1
-        jr      nc,.hasNotHlMemPtr  ; (b[1] < $40 || $BF < b[1]) -> surely no "(ixy+*)"
+        add     $70-$46             ; A = b[1]-$46
+        cp      $BE-$46+1
+        jr      nc,.hasNotHlMemPtr  ; (b[1] < $40+6 || $BE < b[1]) -> surely no "(ixy+*)"
         and     7
-        cp      6
         jr      z,.return3andDecHl  ; "ld r8,(ixy+*)" or "and/or/xor/... (ixy+*)"
 .hasNotHlMemPtr:
         call    GetZ80NOpcodeSize   ; get length of regular instruction formed by rest of opcode
@@ -74,20 +73,20 @@ GetZ80NOpcodeSize:
             ret
 
 .ExtendedInstructions:
-        cp      $92
-        jr      z,.return3andDecHl  ; Z80N nextreg imm8,A
         cp      $27
         jr      z,.return3andDecHl  ; Z80N test imm8
+        cp      $92
+        jr      z,.return3andDecHl  ; Z80N nextreg imm8,A
+        cp      $8A
+        jr      z,.return4andDecHl  ; Z80N push imm16
+        cp      $91
+        jr      z,.return4andDecHl  ; Z80N nextreg imm8,imm8
         sub     $34
         cp      $36-$34+1
         jr      c,.return4andDecHl  ; Z80N add r16,imm16 ($34 .. $36)
-        cp      $8A-$34
-        jr      z,.return4andDecHl  ; Z80N push imm16
-        cp      $91-$34
-        jr      z,.return4andDecHl  ; Z80N nextreg imm8,imm8
         ld      a,$C7
         and     (hl)
-        cp      $43
+        cp      $43                 ; $43, $4B, $53, $5B, $63, $6B, $73, $7B
         jr      z,.return4andDecHl  ; ld (**),r16, ld r16,(**)
     ; everything else from extended is length 2
 .return2andDecHl:
@@ -134,20 +133,18 @@ GetZ80NOpcodeSize:
         add     de,a
         ld      a,(de)              ; A = quartetData = quartetsPatterns[octet]
         pop     de                  ; D = idx7 (0..3)
-    ; return (quartetData>>(idx7*2)) & 0x03;
+    ; return two bits of quartetData selected by idx7
         inc     d
-        jr      .prepareQuartetDataEntry
 .prepareQuartetData:
         rrca
         rrca
-.prepareQuartetDataEntry:
         dec     d
         jr      nz,.prepareQuartetData
-        and     3
+        and     $03
         ret
         
     MACRO PACK_OPCODE_PATTERN_DATA idx0, idx1, idx2, idx3
-        DB  ((idx0) | ((idx1)<<2) | ((idx2)<<4) | ((idx3)<<6))
+        DB  ((idx0<<2) | ((idx1)<<4) | ((idx2)<<6) | ((idx3)<<0))
     ENDM
 
 quartetsPatterns:
