@@ -1,4 +1,5 @@
-.PHONY: all clean gitrelease all_projects nexload2 displayedge Layer2BigPic Z80_ISA_tools Layer2FadeOut
+.PHONY: all clean gitrelease all_projects nexload2 displayedge Layer2BigPic Z80_ISA_tools \
+ Layer2FadeOut ReadingAtariDrivingController
 
 all:
 	TARGET=all $(MAKE) all_projects
@@ -12,10 +13,11 @@ gitrelease: clean
 
 ###############################################################
 # add all sub-projects as prerequisity here
-all_projects: nexload2 displayedge Layer2BigPic Z80_ISA_tools Layer2FadeOut
+all_projects: nexload2 displayedge Layer2BigPic Z80_ISA_tools Layer2FadeOut ReadingAtariDrivingController
+all_projects: ReadingAtariDrivingController
 
 ###############################################################
 # rules for each sub-projects to build specific $(TARGET)
 
-nexload2 displayedge Layer2BigPic Z80_ISA_tools Layer2FadeOut:
+nexload2 displayedge Layer2BigPic Z80_ISA_tools Layer2FadeOut ReadingAtariDrivingController:
 	$(MAKE) --directory=$@ $(TARGET)
