@@ -1097,12 +1097,13 @@ fileError:                      ; esxDOS error code arrives in a
 switchLayer2Off:                ; does switch OFF both write-over-ROM and visibility
         push    bc
         ld      bc,TBBLUE_LAYER2_P123B
-        out     (c),0
+        xor     a
+        out     (c),a
         pop     bc
         ret
 
 ;-------------------------------
-prepareForErrorOutput           ; do "CLS" of ULA screen with white paper ("error" case)
+prepareForErrorOutput:          ; do "CLS" of ULA screen with white paper ("error" case)
         nextreg MMU2_NR52,5*2   ; page-in the bank5 explicitly
         nextreg MMU3_NR53,5*2+1
         call    cleanupBeforeBasic
@@ -1110,7 +1111,7 @@ prepareForErrorOutput           ; do "CLS" of ULA screen with white paper ("erro
         jr      clsWithBordercol.withA
 
 ;-------------------------------
-clsWithBordercol        ; do "CLS" of ULA screen, using the border colour value from header
+clsWithBordercol:       ; do "CLS" of ULA screen, using the border colour value from header
         ld      a,(nexHeader.BORDERCOL)
 .withA: out     ($FE),a     ; change border colour
         ; bank 5 should be already paged in here (nextregs reset)
