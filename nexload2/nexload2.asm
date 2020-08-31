@@ -404,7 +404,7 @@ start:
         ld      (hl),a
 .handleResolved:
         ; set stack pointer, program counter, and BC to 255 ("no handle")|file handle
-.handleInBcSMC=$+1 ld bc,255
+.handleInBcSMC=$+1 : ld bc,255
         ld      hl,(nexHeader.PC)
         ; jump to entry point (or return to BASIC)
         ld      a,h
@@ -1007,16 +1007,16 @@ loadBankA:
 ;-------------------------------
 drawProgressBar:    ; using Bresenham's line algorithm math to progress per banks-num
         ret         ; will become NOP if loaderbar is enabled, or RET when full-drawn/disabled
-.x=$+1  ld      de,$10      ; X-coordinate is designed to go in range 16..224+16-1
-.D=$+1  ld      hl,-225     ; current "D"
-.b2=$+1 ld      bc,0        ; 2*banksNum (adding to "D")
+.x=$+1: ld      de,$10      ; X-coordinate is designed to go in range 16..224+16-1
+.D=$+1: ld      hl,-225     ; current "D"
+.b2=$+1:ld      bc,0        ; 2*banksNum (adding to "D")
 .drawStrips:
         ; check if progress bar is already full
         ld      a,e
         cp      224+16
         ret     nc          ; no more drawing
         ; draw "1px" strip and advance E (whatever that means in current GFX mode)
-.ds=$+1 call    drawPixelStrip_None
+.ds=$+1:call    drawPixelStrip_None
         inc     e           ; advance x coordinate
         add     hl,bc
         jr      nc,.drawStrips
@@ -1078,7 +1078,7 @@ fclose: ret     ; this will be modified to NOP after fopen
 
 ;-------------------------------
 fread:
-handle=$+1  ld a,1              ; SMC self-modify code, storage of file handle
+handle=$+1: ld a,1              ; SMC self-modify code, storage of file handle
         ESXDOS  F_READ
         ret     nc
         ; in case of error just continue into "fileError" routine

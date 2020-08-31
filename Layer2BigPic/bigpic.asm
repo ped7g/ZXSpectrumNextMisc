@@ -122,11 +122,11 @@ ScrollHorizontal:
         call    CopyColumns
         BORDER  5
         ; remap the memory for "bottom" parts and do the same copy again
-.bottomSrcPage=$+1  ld  a,0
+.bottomSrcPage=$+1: ld  a,0
         nextreg $50,a
         inc     a
         nextreg $51,a
-.bottomDstPage=$+1  ld  a,0
+.bottomDstPage=$+1: ld  a,0
         nextreg $52,a
         inc     a
         nextreg $53,a

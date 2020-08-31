@@ -479,7 +479,7 @@ HandleControls:
         ld      (.nr),a                 ; self-modify `nextreg $nn,a` instruction
         ld      a,(hl)
         inc     hl
-.nr=$+2 nextreg $00,a
+.nr=$+2:nextreg $00,a
         djnz    .restoreStateLoop
     ;; return to NextZXOS with "no error"
     ; - CF=0 when exiting (CF=1 A=esx_err, CF=1, A=0, HL="dc" custom error string)
@@ -571,7 +571,7 @@ readNextReg2A:
 DidVideoModeChange:
 ; returns ZF=1 when no change happened, ZF=0 when changed
         call    dspedge.DetectMode  ; A = 0..8 current mode number
-.oM=$+1 cp      dspedge.MODE_COUNT  ; self-modify storage of previous mode
+.oM=$+1:cp      dspedge.MODE_COUNT  ; self-modify storage of previous mode
         ld      (.oM),a             ; reset "old Mode" value
         ret
 
@@ -839,7 +839,7 @@ SaveCfgFile:
         call    writeCh.BcBytes
 .emptyWritingBuffer:
     ; fclose write file
-.Whandle=$+1    ld      a,$FF       ; self-modify storage for write-handle
+.Whandle=$+1:   ld      a,$FF       ; self-modify storage for write-handle
         rst     $08 : DB F_CLOSE
         ret
 

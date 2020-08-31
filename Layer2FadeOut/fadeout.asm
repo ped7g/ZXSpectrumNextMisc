@@ -230,7 +230,7 @@ FadeOutColors:
         sub     c           ; adjust it by calculated "sub" value
         ld      (de),a      ; store the modified color
         nextreg PALETTE_VALUE_9BIT_NR_44,a
-.b2=$+3 nextreg PALETTE_VALUE_9BIT_NR_44,0  ; self-modified code to set second byte of color
+.b2=$+3:nextreg PALETTE_VALUE_9BIT_NR_44,0  ; self-modified code to set second byte of color
         inc     e
         jr      nz,.fadeOutLoop
         ret

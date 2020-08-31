@@ -226,7 +226,7 @@ ParseCfgFile:
                 ld      a,(.Fhandle)
                 rst     $08 : DB $9B    ; F_CLOSE
 .esxError:  ; throw away all stack values to preserve A + Fc + HL, and return up
-.oldSP=$+1      ld      sp,0            ; self-modify storage
+.oldSP=$+1:     ld      sp,0            ; self-modify storage
                 ret
 
 .getCh:
@@ -245,7 +245,7 @@ ParseCfgFile:
                 ld      l,a
                 push    hl
                 pop     ix
-.Fhandle=$+1    ld      a,low .Fhandle  ; self-modify storage for handle
+.Fhandle=$+1:   ld      a,low .Fhandle  ; self-modify storage for handle
                 push    de              ; preserve DE (is working register for parser)
                 rst     $08 : DB $9D    ; F_READ: A = file handle, HL+IX = address, BC = bytes to read
                 jr      c,.esxError
@@ -275,7 +275,7 @@ ParseCfgFile:
             ; prepare to parse values
                 ld      d,S_MARGINS
                 mul     de
-.MarginsPtr=$+2 add     de,.MarginsPtr   ; self-modify storage for value
+.MarginsPtr=$+2:add     de,.MarginsPtr   ; self-modify storage for value
                         ; DE = address into margins array
                 call    ParseFourValuesToDe
                 ;  |
