@@ -14,7 +14,7 @@
 
     ;; include various snippets to the $8000 (16ki Bank2)
     ORG     $8000
-    INCLUDE "findMaxVideoline.i.asm"
+    INCLUDE "findVLinesCount.i.asm"
 
     ;; main "test" code displaying snippet addresses and waiting for some key to run few
     ORG $C000
@@ -71,9 +71,12 @@ test_start:
     call    test_wait_for_key
     ;; run through all the reasonable snippets here
 .run_selection_of_snippets:
-    call    findMaxVideoline
-    ld      hl,test_s0.v
-    call    test_A_to_hex_at_hl
+
+    ; snippet findVLinesCount from findVLinesCount.i.asm
+    call    findVLinesCount
+    ld      de,test_s0.v
+    call    test_HL_to_hex_at_de
+
     ;; refresh screen and snippets texts and wait again for key
     jr      .refresh_screen
 
@@ -102,6 +105,15 @@ test_A_to_hex_at_hl:
     daa
     ld      (hl),a
     inc     hl
+    ret
+
+test_HL_to_hex_at_de:
+    ex      de,hl
+    ld      a,d
+    call    test_A_to_hex_at_hl
+    ld      a,e
+    call    test_A_to_hex_at_hl
+    ex      de,hl
     ret
 
 font_data:
@@ -136,8 +148,8 @@ test_t3:
 
 test_s0:
     DB  .e-.s, 4, 9
-.s: test_txt_hexadr findMaxVideoline, "findMaxVideoline [0x1"
-.v: DB  "..]"
+.s: test_txt_hexadr findVLinesCount, "findVLinesCount [$"
+.v: DB  "????]"
 .e:
 
     ASSERT $ < $FF00            ; there should be at least 256B left for stack space
