@@ -9,9 +9,15 @@
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
-    ORG $C000
 
     INCLUDE "constants.i.asm"
+
+    ;; include various snippets to the $8000 (16ki Bank2)
+    ORG     $8000
+    INCLUDE "findMaxVideoline.i.asm"
+
+    ;; main "test" code displaying snippet addresses and waiting for some key to run few
+    ORG $C000
 
 tile_fnt EQU $4000  ; font is ZX classic "ch8" file, starting at $4100 with space character
 tile_map EQU $4400  ; leave $400 for font (map is $A00 bytes long 80x32 up to $4E00)
@@ -34,6 +40,7 @@ test_start:
     ; setup tilemap palette
     nextreg PALETTE_CONTROL_NR_43,%0'011'0000 ,, PALETTE_INDEX_NR_40,0  ; first tilemap palette
     nextreg PALETTE_VALUE_NR_41,%000'010'00 ,, PALETTE_VALUE_NR_41,%110'110'11  ; white ink on dark green
+.refresh_screen:
     ; copy font data
     ld      hl,font_data
     ld      de,tile_fnt+$100
@@ -61,28 +68,51 @@ test_start:
     jr      .texts_loop
 .texts_done:
     ;; wait for any key
-test_wait_for_key_press:
-    xor     a
-    in      a,(ULA_P_FE)
-    cpl
-    and     $1F
-    jr      z,test_wait_for_key_press
-.wait_for_release:
-    xor     a
-    in      a,(ULA_P_FE)
-    cpl
-    and     $1F
-    jr      nz,.wait_for_release
+    call    test_wait_for_key
     ;; run through all the reasonable snippets here
-test_run_selection_of_snippets:
-    ;; stay in infinite loop for any aftermath in debugger
-    jr  $
+.run_selection_of_snippets:
+    call    findMaxVideoline
+    ld      hl,test_s0.v
+    call    test_A_to_hex_at_hl
+    ;; refresh screen and snippets texts and wait again for key
+    jr      .refresh_screen
+
+test_wait_for_key:
+    ld      l,$1F           ; wait for press
+    call    .read_keys
+    xor     l
+    ld      l,a             ; wait for release
+.read_keys:
+    xor     a
+    in      a,(ULA_P_FE)
+    xor     l
+    and     $1F
+    jr      z,.read_keys
+    ret
+
+test_A_to_hex_at_hl:
+    push    af
+    swapnib
+    call    .nibble
+    pop     af
+.nibble:
+    and     $0F
+    cp      10
+    sbc     a,$69
+    daa
+    ld      (hl),a
+    inc     hl
+    ret
+
+font_data:
+    INCBIN "Envious Bold.ch8"   ; "Envious" font by DamienG https://damieng.com/zx-origins
+    DB      ' '                 ; add single space char after font data for clear screen
 
     DEFARRAY test_hex_digits '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
 test_txt_hexadr MACRO   imm16?, name?
-.adr = imm16?
+.adr = imm16?   ; ok
         DB  '$', test_hex_digits[(.adr>>12)&$F], test_hex_digits[(.adr>>8)&$F]
-        DB  test_hex_digits[(.adr>>4)&$F], test_hex_digits[.adr&$F], ": "
+        DB  test_hex_digits[(.adr>>4)&$F], test_hex_digits[.adr&$F], ' '
         DB  name?
     ENDM
 
@@ -97,26 +127,22 @@ test_t1:
 .e:
 test_t2:
     DB  .e-.s, 4, 5
-.s: DB  "or press a key to run some snippets (hardcoded selection, no output)."
+.s: DB  "or press a key to run some snippets (fixed selection, some output)."
 .e:
 test_t3:
     DB  .e-.s, 5, 7
 .s: DB  "Code snippets:"
 .e:
+
 test_s0:
-    DB  .e-.s, 4, 8
-.s: test_txt_hexadr 0x1234, "TestSnippet"
+    DB  .e-.s, 4, 9
+.s: test_txt_hexadr findMaxVideoline, "findMaxVideoline [0x1"
+.v: DB  "..]"
 .e:
 
-font_data:
-    INCBIN "Envious Bold.ch8"   ; "Envious" font by DamienG https://damieng.com/zx-origins
-    DB      ' '                 ; add single space char after font data for clear screen
     ASSERT $ < $FF00            ; there should be at least 256B left for stack space
 
 test_stack EQU 0                ; put stack at the very end of Bank0
-
-    ;; include various snippets to the $8000 (16ki Bank2)
-    ORG     $8000
 
     SAVENEX OPEN "test.nex", test_start, test_stack : SAVENEX CFG 7
     SAVENEX BANK 2, 0
