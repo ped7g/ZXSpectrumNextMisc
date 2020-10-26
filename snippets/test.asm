@@ -140,8 +140,8 @@ test_txt_hexadr MACRO   imm16?, name?
 
 test_texts:
 test_t0:
-    DB  .e-.s, 13, 2
-.s: DB  "This is test.nex including all snippets for debugging."
+    DB  .e-.s, 10, 2
+.s: DB  "This is runsnippet.nex including all snippets for debugging."
 .e:
 test_t1:
     DB  .e-.s, 5, 4
