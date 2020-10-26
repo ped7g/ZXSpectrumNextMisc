@@ -4,13 +4,13 @@ INCLUDES := $(wildcard *.i.asm)
 
 .PHONY: all clean gitrelease
 
-all: test.nex
+all: runsnippet.nex
 
 clean:
-	$(RM) -f test.nex test.lst
+	$(RM) runsnippet.nex runsnippet.lst
 
-gitrelease: test.nex
-	$(RM) -f test.lst
+gitrelease: runsnippet.nex
+	$(RM) runsnippet.lst
 
-test.nex: test.asm $(INCLUDES) Makefile
+runsnippet.nex: runsnippet.asm $(INCLUDES) Makefile
 	$(SJASMPLUS) $(SJASMPLUSFLAGS) $< --lst

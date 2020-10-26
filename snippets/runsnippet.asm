@@ -4,8 +4,8 @@
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.17.0+)
 ; The Makefile has the full-rebuild instructions
 ;
-; test.asm: including all snippets into one file, shows addresses for debugging purposes
-;  after keypress it runs some of the snippets
+; runsnippet.asm: including all snippets into one file, shows addresses for debugging
+;  purposes and after keypress it runs some of the snippets
 
     DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
 
@@ -174,6 +174,6 @@ test_s1:
 
 test_stack EQU 0                ; put stack at the very end of Bank0
 
-    SAVENEX OPEN "test.nex", test_start, test_stack : SAVENEX CFG 7
+    SAVENEX OPEN "runsnippet.nex", test_start, test_stack : SAVENEX CFG 7
     SAVENEX BANK 2, 0
     SAVENEX CLOSE
