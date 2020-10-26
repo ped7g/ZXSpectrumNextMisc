@@ -7,6 +7,8 @@
 ; test.asm: including all snippets into one file, shows addresses for debugging purposes
 ;  after keypress it runs some of the snippets
 
+    DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
+
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
 
@@ -15,6 +17,8 @@
     ;; include various snippets to the $8000 (16ki Bank2)
     ORG     $8000
     INCLUDE "findVLinesCount.i.asm"
+    INCLUDE "comparisons.i.asm"
+    IFDEF _INCLUDE_COMPARISONS_TESTS_ : INCLUDE "comparisons.test.i.asm" : ENDIF
 
     ;; main "test" code displaying snippet addresses and waiting for some key to run few
     ORG $C000
@@ -37,9 +41,10 @@ test_start:
     nextreg CLIP_TILEMAP_NR_1B,0 ,, CLIP_TILEMAP_NR_1B,255
     ; reset tilemap scrolling
     nextreg TILEMAP_XOFFSET_MSB_NR_2F,0 ,, TILEMAP_XOFFSET_LSB_NR_30,0 ,, TILEMAP_YOFFSET_NR_31,0
-    ; setup tilemap palette
-    nextreg PALETTE_CONTROL_NR_43,%0'011'0000 ,, PALETTE_INDEX_NR_40,0  ; first tilemap palette
-    nextreg PALETTE_VALUE_NR_41,%000'010'00 ,, PALETTE_VALUE_NR_41,%110'110'11  ; white ink on dark green
+    ; setup first tilemap palette for "text 1bpp" mode with two variants (green/red background)
+    nextreg PALETTE_CONTROL_NR_43,%0'011'0000 ,, PALETTE_INDEX_NR_40,0
+    nextreg PALETTE_VALUE_NR_41,%000'010'00 ,, PALETTE_VALUE_NR_41,%110'110'11  ; dark green + white
+    nextreg PALETTE_VALUE_NR_41,%010'000'00 ,, PALETTE_VALUE_NR_41,%110'110'11  ; dark red + white
 .refresh_screen:
     ; copy font data
     ld      hl,font_data
@@ -76,6 +81,11 @@ test_start:
     call    findVLinesCount
     ld      de,test_s0.v
     call    test_HL_to_hex_at_de
+
+    ; snippet Comparison Examples from comparisons.i.asm
+    call    comparisons.run
+    IFDEF _INCLUDE_COMPARISONS_TESTS_ : call comparisons.test : ENDIF
+    
 
     ;; refresh screen and snippets texts and wait again for key
     jr      .refresh_screen
@@ -151,6 +161,14 @@ test_s0:
 .s: test_txt_hexadr findVLinesCount, "findVLinesCount [$"
 .v: DB  "????]"
 .e:
+
+test_s1:
+    DB  .e-.s, 40, 9
+.s: test_txt_hexadr comparisons.run, "Comparison examples"
+.e:
+
+; test_texts list terminator
+    DB  0
 
     ASSERT $ < $FF00            ; there should be at least 256B left for stack space
 
