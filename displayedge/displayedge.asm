@@ -22,7 +22,7 @@
 ; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
-; v1.4  28/10/2020 P7G    More robust Z80N CPU check
+; v1.4  28/10/2020 P7G    More robust Z80N CPU check, fix one case of "\n" EOL (to "\r\n")
 ; v1.3  30/01/2020 P7G    Check for Z80N CPU at start, better O/P keys handler
 ; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
 ;                           keywords prefix "edge_", CRLF eols preferred, calc bak filename
@@ -817,7 +817,9 @@ SaveCfgFile:
         inc     e
         cp      10
         jr      z,.hasEolAfterOldFile
-        ld      a,10                ; EOL to make mode data start at new line
+        ld      a,13                ; EOL "\r\n" to make mode data start at new line
+        call    writeCh
+        ld      a,10
         call    writeCh
 .hasEolAfterOldFile:
         ld      b,dspedge.MODE_COUNT
