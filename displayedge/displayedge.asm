@@ -22,6 +22,7 @@
 ; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
+; v1.4  28/10/2020 P7G    More robust Z80N CPU check
 ; v1.3  30/01/2020 P7G    Check for Z80N CPU at start, better O/P keys handler
 ; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
 ;                           keywords prefix "edge_", CRLF eols preferred, calc bak filename
@@ -197,10 +198,12 @@ start:
         inc     a               ; A=1, Fc=0
         mirror  a : nop : nop   ; $01 -> $80 on Z80N CPU, maybe "inc h" on Z80
                                 ; something else on Z380 and similar (but not mirror A)
-        rra
-        jr      nc,.z80n_opcode_detected
-        ; A=0, Fc=1 on regular Z80 -> report wrong HW
+        cp      $80
+        jr      z,.z80n_opcode_detected
+        ; report wrong HW: A=0, Fc=1 (enforce it with regular instruction, no assumptions)
+        xor     a
         ld      hl,.ErrTxt_NotZ80N
+        scf
         ret
 .ErrTxt_NotZ80N:
         DC      "Z80N CPU required"

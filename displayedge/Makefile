@@ -28,4 +28,4 @@ gitrelease: DISPLAYEDGE
 fullImage: all
 	hdfmonkey put tbblue.img DISPLAYEDGE DOT
 	# hdfmonkey put tbblue.img test.cfg sys/displayedge.cfg
-	./rCSmmc
+	mmcCSpect tbblue.img
