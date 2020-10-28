@@ -23,6 +23,7 @@
 ;
 ; Changelist:
 ; v1.4  28/10/2020 P7G    More robust Z80N CPU check, fix one case of "\n" EOL (to "\r\n")
+;                           font replaced with 8x8 Topan font (same as Odin is using)
 ; v1.3  30/01/2020 P7G    Check for Z80N CPU at start, better O/P keys handler
 ; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
 ;                           keywords prefix "edge_", CRLF eols preferred, calc bak filename
@@ -1540,19 +1541,19 @@ tilemapPalette:
                 db  %000'100'00,0       ; 6 green
 tilemapPalette_SZ:  EQU $ - tilemapPalette
 
-;-------------------------------
-; FONT data for tilemode (32B per char, almost 4kiB of data)
-; desperate times, desperate measures: this is font designed for copper-8x6 tilemode
-; TODO replace with something designed for 8x8 later
-
 EsxErrorBufferWithLabel:
         DB      CHAR_DOT_RED, "Save failed: "
-    ; the "tilemapFont_char24" address should follow, that area is used to extract esxdos error text
+    ; the "tilemapFont_char24" address should follow, reusing font area for esxdos error text
 
-tilemapFont:    EQU     tilemapFont_char24 - 24*32
-        ; 24 chars skipped (3*256)
+;-------------------------------
+; FONT data for tilemode (32B per char, almost 4kiB of data)
+; the special characters are from 8x6 mode font, characters are from Topan font
+
         ; starts at character 32 - 4 dir_arrows - 3 color dots - 1 reserve = 24
 tilemapFont_char24:
+tilemapFont:    EQU     tilemapFont_char24 - 24*32  ; 24 chars skipped (3*256)
+
+    ; includes full 8x6 font first, reserving space (Topan will be written over later)
     OPT push listoff
         INCLUDE "tilemap_font_8x6.i.asm"
 ;         INCBIN "ned_gfx_font.bin"
@@ -1560,6 +1561,29 @@ tilemapFont_char24:
 
 last:       ; after last machine code byte which should be part of the binary
     ENDT        ;; end of DISP
+
+    ; overwrite font with topan.fnt from Odin project
+    ; converting it from 1bpp to 4bpp at assembly time
+topan_1bpp:
+    INCBIN "topan.fnt"      ; source 1bpp data (outside of DOT command binary)
+    ; move '=' 1 pixel up
+    ORG topan_1bpp+'='*8 : .7 DB {b $+1 }
+    ; move '|' 1 pixel right
+    ORG topan_1bpp+'|'*8 : .8 DB {b $ } >> 1
+    ; convert 1bpp to 4bpp data and overwrite the 8x6 font in dot command area
+    ORG topan_1bpp-(128-' ')*32
+    OPT push listoff
+topan_rptr=topan_1bpp+' '*8
+        DUP (128-' ')*8
+topan_pixels={b topan_rptr}
+topan_rptr=topan_rptr+1
+topan_pxmask=$80
+            DUP 4
+                DB ((!!(topan_pixels&topan_pxmask))&$30) | ((!!(topan_pixels&(topan_pxmask>>1)))&$03)
+topan_pxmask=topan_pxmask>>2
+            EDUP
+        EDUP
+    OPT pop
 
     IFNDEF TESTING
         SAVEBIN "DISPLAYEDGE",start,last-start
