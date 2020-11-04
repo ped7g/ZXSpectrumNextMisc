@@ -22,16 +22,20 @@ GfxCursorLineB:     HEX 00010101 EEEEEEEE 01010100 EEEEEEEE
 GfxCursorLineC:     HEX 0001EEEE EEEEEEEE EEEE0100 EEEEEEEE
 GfxCursorLineD:     HEX EE01EEEE EEEEEEEE EEEE01EE EEEEEEEE
 GfxCursorLineF:     HEX EEEEEEEE EEEEEEEE EEEEEEEE EEEEEEEE
+GfxCursorLineG:     HEX 01EEEEEE EEEEEEEE EEEEEEEE EEEEEEEE ; 1px dot with shadow for mouse coordinates
+GfxCursorLineH:     HEX EE00EEEE EEEEEEEE EEEEEEEE EEEEEEEE
 GfxCursorLines:
     DB  0*16,1*16,2*16,3*16,4*16,4*16,4*16,4*16,3*16,2*16,1*16,0*16,4*16,4*16,4*16,4*16
+GfxCursor2Lines:
+    DB  5*16,6*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16
 
 TxtKeyI:
     DZ  "i - different colour orders"
 TxtCursors:
-    DZ  "cursors/mouse - move cursor"
+    DZ  "arrows/mouse - move cursor"
 UlaRgbLabels    EQU $C040
 TxtRgbLabels:
-    DZ  "[$..,$..] R:. G:. B:. (9b:$...)"
+    DZ  "[$__,$__] R   G   B   (9b:$___)"
     ;    012345678901234567890123456789
 TxtColorByte1st EQU UlaRgbLabels+2
 TxtColorByte2nd EQU UlaRgbLabels+6
@@ -48,6 +52,10 @@ cursorpos:
         DW      0
 showcursor:
         DB      0
+lastMouse:
+        DW      0
+someMouse:
+        DB      0
 
         ; include the font data starting at 32nd character
     ASSERT $ <= font + ' '*8
@@ -60,7 +68,7 @@ InitUlaScreen:
         ld      bc,$1800
         ld      (hl),l
         ldir
-        ld      (hl),A_BRIGHT|P_BLACK|GREEN
+        ld      (hl),A_BRIGHT|P_BLACK|CYAN
         ld      bc,$300-1
         ldir
     ; print static strings
@@ -83,8 +91,14 @@ InitUlaScreen:
         ld      (hl),a
         inc     l
         djnz    .cursorMouseAttrLoop
-        ld      l,$27
+        ld      l,$26
+        ld      (hl),A_BRIGHT|P_BLACK|CYAN
+        ld      l,$4A
+        ld      (hl),A_BRIGHT|P_BLACK|RED
+        ld      l,$4E
         ld      (hl),A_BRIGHT|P_BLACK|GREEN
+        ld      l,$52
+        ld      (hl),A_BRIGHT|P_BLACK|BLUE
         ret
 
 PrintUlaString:
@@ -196,7 +210,7 @@ InitSprites:
         ; upload sprite graphics to first patter (cursor gfx defined by important lines)
         ld      bc,SPRITE_STATUS_SLOT_SELECT_P_303B
         out     (c),a           ; select pattern 0
-        ld      bc,$1000|SPRITE_PATTERN_P_5B    ; B = 16 lines, C = patterns port
+        ld      bc,$2000|SPRITE_PATTERN_P_5B    ; B = 32 lines, C = patterns port
         ld      de,GfxCursorLines
 .uploadPattern:
         ld      a,(de)
@@ -205,19 +219,89 @@ InitSprites:
         add     hl,a            ; source data for one line
         .16 OUTINB              ; upload 16 bytes
         djnz    .uploadPattern
+.resetSprAttributes:
         ; setup cursor sprite attributes (make it also visible, it will be shown/hidden by global flag)
         nextreg SPRITE_ATTR_SLOT_SEL_NR_34,0    ; set sprite 0 as active
-        nextreg SPRITE_ATTR0_NR_35,0
+        nextreg SPRITE_ATTR0_NR_35,low -16      ; X=496 (512-16)
         nextreg SPRITE_ATTR1_NR_36,0
-        nextreg SPRITE_ATTR2_NR_37,0
-        nextreg SPRITE_ATTR3_NR_38,$80          ; visible, pattern 0, 4-byte type
+        nextreg SPRITE_ATTR2_NR_37,1            ; X8=1 (X = 496 outside of screen)
+        nextreg SPRITE_ATTR3_INC_NR_78,$80      ; visible, pattern 0, 4-byte type, ++sprite ID
+        ; dot-cursor for mouse coordinates
+        nextreg SPRITE_ATTR0_NR_35,low -16      ; X=496 (512-16)
+        nextreg SPRITE_ATTR1_NR_36,0
+        nextreg SPRITE_ATTR2_NR_37,1            ; X8=1 (X = 496 outside of screen)
+        nextreg SPRITE_ATTR3_NR_38,$81          ; visible, pattern 1, 4-byte type
         ret
+
+ReadMousePortData:
+    ; read raw [x,y] from Kempston mouse port
+        ld      bc,KEMPSTON_MOUSE_X_P_FBDF
+        in      e,(c)
+        ld      bc,KEMPSTON_MOUSE_Y_P_FFDF
+        in      a,(c)
+        neg
+        ld      d,a
+        ret
+
+ReadMouse:
+        call    ReadMousePortData
+        ld      hl,(lastMouse)
+        or      a
+        sbc     hl,de
+        jr      z,.noMovementDetected
+    ; use the coordinates directly (no fancy mouse driver tracking speed vectors/etc in this small example)
+        ld      (lastMouse),de
+        ld      a,SHOW_CURSOR_DURATION
+        ld      (showcursor),a
+        ld      (someMouse),a           ; enable buttons forever with any movement
+        nextreg SPRITE_ATTR_SLOT_SEL_NR_34,1    ; set sprite 1 as active
+        ld      a,32                    ; mouse X 0..255 transformed to 32..287
+        add     a,e
+        nextreg SPRITE_ATTR0_NR_35,a    ; X.lsb
+        rla
+        and     1
+        nextreg SPRITE_ATTR2_NR_37,a    ; X8 extracted from carry flag
+        ld      a,d
+        nextreg SPRITE_ATTR1_NR_36,a    ; Y is used directly, doesn't need +32
+.noMovementDetected:
+        ld      a,(someMouse)
+        or      a
+        ret     z                       ; skip buttons check if there was no movement ever
+        ld      a,(keyboardDebounce)
+        or      a
+        ret     nz                      ; ignore buttons while press-delay is active
+    ; read buttons and move "cursor" square if something is pressed
+        ld      bc,KEMPSTON_MOUSE_B_P_FADF
+        in      a,(c)
+        cpl
+        and     7
+        ret     z                       ; no button
+        ld      a,KEYBOARD_REPEAT_DELAY ; set debounce/repeat delay (also affects mouse buttons)
+        ld      (keyboardDebounce),a    ; disabling key reading for N frames
+    ; calculate new cursor position
+        ld      hl,(lastMouse)
+        srl     l
+        srl     l
+        srl     l                       ; pos X = mouseX/8
+        ld      a,h
+        sub     32+32                   ; pos Y = (mouseY-64)/8
+        ret     c                       ; mouse above palette area
+        ret     m                       ; mouse under palette area
+        rrca
+        rrca
+        rrca
+        and     15
+        ld      h,a
+    ; set up new cursor position + update sprite + RGB readings (tailing into mainLoop)
+        push    af                      ; needs any value on stack to finish cleanly
+        jp      mainLoop.setCursorDirectly
 
 start:
         di
         nextreg TURBO_CONTROL_NR_07,3                   ; 28MHz
         nextreg LAYER2_RAM_BANK_NR_12,9                 ; Layer 2 from bank 9 (NextZXOS default)
         nextreg SPRITE_CONTROL_NR_15,%0'0'0'000'1'1     ; SLU, no clipping, sprites visible + over border
+        nextreg TRANSPARENCY_FALLBACK_COL_NR_4A,$E3     ; pink fallback (for debug purposes only)
         nextreg LAYER2_CONTROL_NR_70,%00'00'0000        ; 256x192x8 mode, palette offset +0
         nextreg DISPLAY_CONTROL_NR_69,%1'0'000000       ; Layer 2 ON, ULA shadow off, Timex = 0
         nextreg LAYER2_XOFFSET_MSB_NR_71,0 ,, LAYER2_XOFFSET_NR_16,0 ,, LAYER2_YOFFSET_NR_17,0  ; layer2 X/Y offset = [+0, +0]
@@ -238,6 +322,10 @@ start:
 
     ; init sprites used to show the cursor
         call    InitSprites
+
+    ; read initial mouse position (to later decide if mouse was even touched)
+        call    ReadMousePortData
+        ld      (lastMouse),de
 
     ; draw the color tiles, each tile is 8x8 pixels, the whole map is 32x16 (512 colors)
     ; indexes goes from 255 to 0, two times (copper will switch palette in the middle)
@@ -274,16 +362,28 @@ tilesRowLoop:
         nextreg COPPER_DATA_16B_NR_63,%0'001'000'0
         ; cu.MOVE(GLOBAL_TRANSPARENCY_NR_14,$01) to inhibit transparency in upper half
         nextreg COPPER_DATA_16B_NR_63,GLOBAL_TRANSPARENCY_NR_14
-        nextreg COPPER_DATA_16B_NR_63,1
+        nextreg COPPER_DATA_16B_NR_63,$01
+        ; cu.WAIT(line=31+32,h=52 (left border)) (1/4 of 32x16 field)
+        nextreg COPPER_DATA_16B_NR_63,$80|(52<<1)
+        nextreg COPPER_DATA_16B_NR_63,31+32
+        ; cu.MOVE(GLOBAL_TRANSPARENCY_NR_14,$FE) to inhibit transparency
+        nextreg COPPER_DATA_16B_NR_63,GLOBAL_TRANSPARENCY_NR_14
+        nextreg COPPER_DATA_16B_NR_63,$FE
         ; cu.WAIT(line=31+64,h=52 (left border))
         nextreg COPPER_DATA_16B_NR_63,$80|(52<<1)
         nextreg COPPER_DATA_16B_NR_63,31+64             ; +64 because 8 row tiles per 8px
         ; cu.MOVE(PALETTE_CONTROL_NR_43,%0'000'010'0)   ; select second palette
         nextreg COPPER_DATA_16B_NR_63,PALETTE_CONTROL_NR_43
         nextreg COPPER_DATA_16B_NR_63,%0'101'010'0
-        ; cu.MOVE(GLOBAL_TRANSPARENCY_NR_14,$E3) to inhibit transparency in bottom half
+        ; cu.MOVE(GLOBAL_TRANSPARENCY_NR_14,$01) to inhibit transparency in bottom half
         nextreg COPPER_DATA_16B_NR_63,GLOBAL_TRANSPARENCY_NR_14
-        nextreg COPPER_DATA_16B_NR_63,$E3
+        nextreg COPPER_DATA_16B_NR_63,$01
+        ; cu.WAIT(line=31+88,h=52 (left border)) (~3/4 of 32x16 field)
+        nextreg COPPER_DATA_16B_NR_63,$80|(52<<1)
+        nextreg COPPER_DATA_16B_NR_63,31+88
+        ; cu.MOVE(GLOBAL_TRANSPARENCY_NR_14,$FE) to inhibit transparency
+        nextreg COPPER_DATA_16B_NR_63,GLOBAL_TRANSPARENCY_NR_14
+        nextreg COPPER_DATA_16B_NR_63,$FE
         ; cu.HALT
         nextreg COPPER_DATA_16B_NR_63,$FF
         nextreg COPPER_DATA_16B_NR_63,$FF
@@ -303,9 +403,9 @@ mainLoop:
         sub     1
         adc     a,0
         ld      (showcursor),a          ; countdown to zero
-        sbc     a,a                     ; convert non-zero initial timer to zero, zero to $FF
-        inc     a                       ; non-zero initial timer = visible sprites, zero = off
-        or      %0'0'0'000'1'0          ; SLU, no clipping, spr over border
+        ld      a,%0'0'0'000'1          ; SLU, no clipping, spr over border (>>1)
+        ccf
+        rla                             ; non-zero initial timer = visible sprites, zero = off
         nextreg SPRITE_CONTROL_NR_15,a
 
     ; setup the palettes
@@ -319,6 +419,19 @@ mainLoop:
         call    uploadFullPalette
         nextreg PALETTE_CONTROL_NR_43,%0'001'010'0      ; first Layer2 palette to set
         call    uploadFullPalette
+
+        ld      a,(selectedPalette)
+        add     a,a
+        ld      hl,palettesNamesPtrs
+        add     hl,a
+        ld      c,(hl)
+        inc     hl
+        ld      b,(hl)                  ; BC = pointer to string with palette name
+        ld      de,UlaPalName
+        call    PrintUlaString
+
+    ; read mouse and move cursor if it's changing
+        call    ReadMouse
 
     ; read keyboard and react to user controls
         ld      a,(keyboardDebounce)    ; ignore keys for short delay after previous one
@@ -356,11 +469,17 @@ mainLoop:
 
 .keyIpressed:
         ld      a,(selectedPalette)
-        xor     1
+        inc     a
+        cp      TOTAL_PALETTES
+        jr      c,.selectedValidPal
+        xor     a
+.selectedValidPal:
         ld      (selectedPalette),a
         xor     a
         ld      (showcursor),a          ; hide cursor
-        jr      mainLoop_delayKey
+        call    InitSprites.resetSprAttributes
+        call    InitUlaScreen
+        jp      mainLoop_delayKey
 
 .key0pressed:
         push    af
@@ -401,9 +520,11 @@ mainLoop:
         cp      16
         adc     a,-1                    ; clamp Y pos to 15 as max
         ld      h,a
+.setCursorDirectly:
         ld      (cursorpos),hl
         call    UpdateCursorReadings
         ; update sprite position and reset visibility duration
+        nextreg SPRITE_ATTR_SLOT_SEL_NR_34,0    ; select sprite 0
         ld      a,l
         add     a,a
         add     a,a
@@ -470,6 +591,19 @@ drawColorTilesAtHl:
         pop     bc
         ret
 
+UlaPalName      EQU $D0A0
+palettesNamesPtrs:
+        DW      palette0Name, palette1Name, palette2Name, palette3Name
+
+palette0Name:
+        DZ      "Ordered by sum of channel values"
+palette1Name:
+        DZ      "index 511 to 0 as color itself"
+palette2Name:
+        DZ      "up: default L2, down: other 256"
+palette3Name:
+        DZ      "188 colours, \"art\" palette"
+
     ; after this address there are multiple (two at this moment) 1024 bytes blocks with
     ; different ordering of the colours to set up palettes
 palettesData:
@@ -485,6 +619,7 @@ palettesData:
     ; but 0 in second palette is black #000, and 255 in first palette is white #777
 palettesData_channelSumSorted:
 
+    OPT push listoff
 n=0
 vb=0
 vr=0
@@ -492,7 +627,6 @@ vg=0
 dir=0   ; 0 -> from B toward R, !0 -> from R toward B (G is always last resort)
     DUP 512
         DB (vr<<5)|(vg<<2)|(vb>>1), vb&1
-        OPT push listoff
         IF 0==dir && 0<vb && vr<7       ; going from B toward R
 vb=vb-1
 vr=vr+1
@@ -528,22 +662,130 @@ vg=vg+1
 dir=0
         ENDIF
 n=n+1
-        OPT pop
     EDUP
+    OPT pop
 
     ; color table - 2x 512 bytes of 9bit colors going from "0" to "511" (black to white)
     ; the index is used as 9bit color value
 palettesData_9bitIndex:
+    OPT push listoff
 n=0
     DUP 512
         DB n>>1, n&1
 n=n+1
     EDUP
+    OPT pop
+
+    ; Layer2 default palette + complement to it (missing colours from default)
+    ; index 0..255 is the "missing" colour stuff, 256..511 is Layer2 default palette
+palettesData_L2default:
+    OPT push listoff
+n=0
+    DUP 256
+        DB n, 1-((n>>1)|n)&1    ; botttom part has the "missing" colours
+n=n+1
+    EDUP
+n=0
+    DUP 256
+        DB n, ((n>>1)|n)&1      ; upper part has the default palette
+n=n+1
+    EDUP
+    OPT pop
+
+    ; "artsy" ordering of coulours - this one does NOT display all 512 colours!
+palettesData_artsy:
+
+    OPT push listoff
+
+    MACRO gen_n idx?, vr?, vg?, vb?
+            ORG palettesData_artsy + (idx?)*2
+            DB (((vr?)&7)<<5)|(((vg?)&7)<<2)|(((vb?)&7)>>1), (vb?)&1
+    ENDM
+
+    MACRO gen_grad_ext idx?, di?, rep?, vr?, vg?, vb?, dr?, dg?, db?
+n=idx?
+vr=vr?
+vg=vg?
+vb=vb?
+        DUP rep?
+            gen_n n, vr, vg, vb
+n=n+di?
+vr=vr+dr?
+vg=vg+dg?
+vb=vb+db?
+        EDUP
+    ENDM
+
+    MACRO gen_grad idx?, rep?, vr?, vg?, vb?, dr?, dg?, db?
+        gen_grad_ext idx?, -32, rep?, vr?, vg?, vb?, dr?, dg?, db?
+    ENDM
+
+    ; fill 1024B with debug colour
+    .32 HEX 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01 2D01
+bn=510-32
+    gen_grad bn, 8, 7, 7, 7, -1, -1, -1    ; greys
+bn=bn-2
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 7, 6, 7, -1, -1, -1    ; violet-ish greys
+bn=bn-1
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 7, 6, 6, -1, -1, -1    ; red-ish greys
+bn=bn-1
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 7, 7, 6, -1, -1, -1    ; yellow-ish greys
+bn=bn-1
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 6, 7, 6, -1, -1, -1    ; green-ish greys
+bn=bn-1
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 6, 7, 7, -1, -1, -1    ; cyan-ish greys
+bn=bn-1
+    gen_n bn, 7, 7, 7 : gen_grad bn-1*32, 7, 6, 6, 7, -1, -1, -1    ; blue-ish greys
+
+bn=bn-2
+    gen_grad bn, 7, 7, 6, 7,  0, -1,  0    : gen_grad bn-7*32, 7, 6, 0, 6, -1,  0, -1     ; violet
+bn=bn-1
+    gen_grad bn, 7, 7, 6, 6,  0, -1, -1    : gen_grad bn-7*32, 7, 6, 0, 0, -1,  0,  0     ; reds
+bn=bn-1
+    gen_grad bn, 7, 7, 7, 6,  0,  0, -1    : gen_grad bn-7*32, 7, 6, 6, 0, -1, -1,  0     ; yellows
+bn=bn-1
+    gen_grad bn, 7, 6, 7, 6, -1,  0, -1    : gen_grad bn-7*32, 7, 0, 6, 0,  0, -1,  0     ; green
+bn=bn-1
+    gen_grad bn, 7, 6, 7, 7, -1,  0,  0    : gen_grad bn-7*32, 7, 0, 6, 6,  0, -1, -1     ; cyan
+bn=bn-1
+    gen_grad bn, 7, 6, 6, 7, -1, -1,  0    : gen_grad bn-7*32, 7, 0, 0, 6,  0,  0, -1     ; blues
+
+bn=bn-2
+    gen_grad bn, 3, 7, 5, 6,  0, -2, -1    : gen_grad bn-3*32, 3, 6, 0, 3, -1,  0, -1 : gen_n bn-6*32, 3, 0, 1 : gen_n bn-7*32, 2, 0, 1
+bn=bn-1
+    gen_grad bn, 3, 7, 6, 5,  0, -1, -2    : gen_grad bn-3*32, 3, 6, 3, 0, -1, -1,  0 : gen_n bn-6*32, 3, 1, 0 : gen_n bn-7*32, 2, 1, 0
+bn=bn-1
+    gen_grad bn, 3, 6, 7, 5, -1,  0, -2    : gen_grad bn-3*32, 3, 3, 6, 0, -1, -1,  0 : gen_n bn-6*32, 1, 3, 0 : gen_n bn-7*32, 1, 2, 0
+bn=bn-1
+    gen_grad bn, 3, 5, 7, 6, -2,  0, -1    : gen_grad bn-3*32, 3, 0, 6, 3,  0, -1, -1 : gen_n bn-6*32, 0, 3, 1 : gen_n bn-7*32, 0, 2, 1
+bn=bn-1
+    gen_grad bn, 3, 5, 6, 7, -2, -1,  0    : gen_grad bn-3*32, 3, 0, 3, 6,  0, -1, -1 : gen_n bn-6*32, 0, 1, 3 : gen_n bn-7*32, 0, 1, 2
+bn=bn-1
+    gen_grad bn, 3, 6, 5, 7, -1, -2,  0    : gen_grad bn-3*32, 3, 3, 0, 6, -1,  0, -1 : gen_n bn-6*32, 1, 0, 3 : gen_n bn-7*32, 1, 0, 2
+
+bn=bn-2
+    gen_grad_ext bn, -64, 4, 7, 3, 7, -2, -1, -2 : gen_grad_ext bn-32, -64, 3, 6, 3, 6, -2, -1, -2
+bn=bn-1
+    gen_grad_ext bn, -64, 4, 7, 3, 3, -2, -1, -1 : gen_grad_ext bn-32, -64, 3, 6, 3, 3, -2, -1, -1
+bn=bn-1
+    gen_grad_ext bn, -64, 4, 7, 7, 3, -2, -2, -1 : gen_grad_ext bn-32, -64, 3, 6, 6, 3, -2, -2, -1
+bn=bn-1
+    gen_grad_ext bn, -64, 4, 3, 7, 3, -1, -2, -1 : gen_grad_ext bn-32, -64, 3, 3, 6, 3, -1, -2, -1
+bn=bn-1
+    gen_grad_ext bn, -64, 4, 3, 7, 7, -1, -2, -2 : gen_grad_ext bn-32, -64, 3, 3, 6, 6, -1, -2, -2
+bn=bn-1
+    gen_grad_ext bn, -64, 4, 3, 3, 7, -1, -1, -2 : gen_grad_ext bn-32, -64, 3, 3, 3, 6, -1, -1, -2
+
+    ORG palettesData_artsy + 1024       ; restore pointer (from inside pal to after it)
+    OPT pop
+
+TOTAL_PALETTES  EQU ($-palettesData)/1024
 
     ; reserve space for stack
         BLOCK   1024, $AA   ; $AAAA is debug filler in case of debugging stack
         BLOCK   10,0        ; avoid non-zero stack data warning of newer sjasmplus (unreleased yet)
 stack:  DW      $AAAA
+
     SAVENEX OPEN "show512.nex", start, stack, 0, 2
     SAVENEX CORE 3,0,0 : SAVENEX CFG 0
     SAVENEX AUTO : SAVENEX CLOSE
