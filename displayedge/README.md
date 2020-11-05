@@ -83,18 +83,21 @@ video mode - and store that in the config file. Any SW aware of this config file
 read it upon start, and shrink the playfield to display everything important within the
 area of screen which is visible on your display.
 
-Use the controls to switch to the video mode you want to add margin to (some video modes
-have to be pre-selected by starting the machine in particular mode, it is possible to edit
-margins of actual video mode), and then edit the values until the "green frame" is visible
-well on your display, then save the config.
+Use the controls (F and T) to switch to the video mode you want to edit margins for (the
+machine type/timing can be switched only in VGA mode, VGA<->HDMI switch must be done
+while restarting machine by user).
+
+Then edit the values (screen corners) until the "green frame" is visible well on your
+display, then save the config.
 
 The controls are:
 
-    OP   : to select the edge of display for editing
-    HJKL : subtract/add to the margin of selected edge
-    Q    : exit back to NextZXOS
-    R    : reload the cfg file currently stored on disk (discards any changes)
-    S    : save the currently modified values to cfg file
-    F    : change between 50Hz/60Hz mode (also regular "F3" should work)
-    T    : in VGA modes you can switch between different video-mode timings
+    SPACE  : select active corner of display (top left vs bottom right)
+    arrows : edit visible position of the active corner ("cursor joystick")
+    (also Kempston/MD controller can be used, fire then selects corner)
+    Q      : exit back to NextZXOS
+    R      : reload the cfg file currently stored on disk (discards any changes)
+    S      : save the currently modified values to cfg file
+    F      : change between 50Hz/60Hz mode (also regular "F3" key works)
+    T      : in VGA modes you can switch between different video-mode timings
     (Q/R/S/F/T usually requires confirmation by pressing "Y" after)
