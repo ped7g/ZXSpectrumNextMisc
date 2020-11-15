@@ -30,9 +30,11 @@ GfxCursor2Lines:
     DB  5*16,6*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16,4*16
 
 TxtKeyI:
-    DZ  "i - different colour orders"
+    DZ  "i different colour orders"
 TxtCursors:
-    DZ  "arrows/mouse - move cursor"
+    DZ  "arrows/mouse moves cursor"
+TxtBreak:
+    DZ  "hold break to exit"
 UlaRgbLabels    EQU $C040
 TxtRgbLabels:
     DZ  "[$__,$__] R   G   B   (9b:$___)"
@@ -62,6 +64,12 @@ someMouse:
     ORG font + ' '*8
     INCBIN "Envious Bold.ch8"   ; "Envious" font by DamienG https://damieng.com/zx-origins
 
+BREAK_HOLD_INIT EQU     255-50  ; cca. 1sec
+BREAK_ATTR_ADR  EQU     $DAE5
+EXIT_ATTR_ADR   EQU     $DAED
+breakHoldCounter:
+        DB      BREAK_HOLD_INIT
+
 InitUlaScreen:
         ld      hl,$C000
         ld      de,$C001
@@ -78,6 +86,9 @@ InitUlaScreen:
         ld      de,$C020
         ld      bc,TxtCursors
         call    PrintUlaString
+        ld      de,$D0E0
+        ld      bc,TxtBreak
+        call    PrintUlaString
         ld      de,UlaRgbLabels
         ld      bc,TxtRgbLabels
         call    PrintUlaString
@@ -87,10 +98,7 @@ InitUlaScreen:
         ld      (hl),a
         ld      l,$20
         ld      b,13
-.cursorMouseAttrLoop:
-        ld      (hl),a
-        inc     l
-        djnz    .cursorMouseAttrLoop
+        call    .colorizeAttrLoop
         ld      l,$26
         ld      (hl),A_BRIGHT|P_BLACK|CYAN
         ld      l,$4A
@@ -99,6 +107,12 @@ InitUlaScreen:
         ld      (hl),A_BRIGHT|P_BLACK|GREEN
         ld      l,$52
         ld      (hl),A_BRIGHT|P_BLACK|BLUE
+        ld      b,5
+        ld      hl,BREAK_ATTR_ADR
+.colorizeAttrLoop:
+        ld      (hl),a
+        inc     l
+        djnz    .colorizeAttrLoop
         ret
 
 PrintUlaString:
@@ -243,7 +257,57 @@ ReadMousePortData:
         ld      d,a
         ret
 
-ReadMouse:
+ReadBreakAndMouse:
+    ; read "break" key (Caps shift + space)
+        ld      a,~(1<<0)               ; first row (VCXZ<CS>)
+        in      a,(ULA_P_FE)
+        rra
+        sbc     hl,hl                   ; hl = 0 when CS is pressed, $FFFF when released
+        ex      de,hl
+        ld      a,~(1<<7)               ; eight row (BNM<SS><SP>)
+        in      a,(ULA_P_FE)
+        rra
+        sbc     hl,hl                   ; hl = 0 when SP is pressed, $FFFF when released
+        ld      a,l
+        or      e                       ; A = 0 when break is pressed, $FF when not
+        add     a,a
+        inc     a                       ; A = 1 pressed, -1 not pressed
+        ld      hl,(breakHoldCounter)   ; L = current frame counter for break-holding
+        add     a,l
+        jr      nz,.dontExitYet
+        ld      bc,(25*70000)/256/(20*4+13) ; cca. 25 frames delay (C=N, B=0)
+.delayBeforeReset:
+        nextreg MMU0_0000_NR_50,$FF     ; map ROM to bottom 16kiB
+        nextreg MMU1_2000_NR_51,$FF
+        nextreg COPPER_CONTROL_HI_NR_62,0   ; switch off copper (to create "effect")
+        nextreg TURBO_CONTROL_NR_07,0       ; switch to 3.5MHz for longer delay loop
+        djnz    .delayBeforeReset
+        dec     c
+        jr      nz,.delayBeforeReset
+        nextreg NEXT_RESET_NR_02,1      ; soft reset
+        jr      $
+.dontExitYet:
+        cp      BREAK_HOLD_INIT         ; clamp the value to BREAK_HOLD_INIT as minimum
+        adc     a,0
+        ld      (breakHoldCounter),a    ; 205..255 value
+    ; colorize the break by hold-duration
+        ld      hl,EXIT_ATTR_ADR
+        sub     BREAK_HOLD_INIT         ; 0..50
+        rrca
+        rrca
+        rrca
+        and     7
+        ld      b,a                     ; B=0..6
+        push    bc
+        ld      a,A_BRIGHT|P_RED|YELLOW
+        call    nz,InitUlaScreen.colorizeAttrLoop
+        pop     bc
+        ld      a,6
+        sub     b
+        ld      b,a
+        ld      a,A_BRIGHT|P_BLACK|CYAN
+        call    nz,InitUlaScreen.colorizeAttrLoop
+    ; read mouse and move mouse cursor
         call    ReadMousePortData
         ld      hl,(lastMouse)
         or      a
@@ -430,8 +494,8 @@ mainLoop:
         ld      de,UlaPalName
         call    PrintUlaString
 
-    ; read mouse and move cursor if it's changing
-        call    ReadMouse
+    ; read "break" key (Caps shift + space), mouse and move cursor if it's changing
+        call    ReadBreakAndMouse
 
     ; read keyboard and react to user controls
         ld      a,(keyboardDebounce)    ; ignore keys for short delay after previous one
