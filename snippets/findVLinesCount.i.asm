@@ -1,4 +1,4 @@
-; returns in HL the video-lines count for current mode (ie. 0x138 for VGA ZX128)
+; returns in HL the video-lines count for current mode (ie. 0x137 for VGA ZX128)
 ; modifies: AF, BC, HL
 ; This algorithm works correctly only for modes with 258..511 video lines
 ; current core 3.1.5 conforms to this for all VGA/HDMI modes in any variant (min 261?)
