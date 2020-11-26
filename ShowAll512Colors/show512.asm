@@ -35,16 +35,16 @@ TxtCursors:
     DZ  "arrows/mouse moves cursor"
 TxtBreak:
     DZ  "hold break to exit"
-UlaRgbLabels    EQU $C040
+UlaRgbLabels    EQU $C040,10
 TxtRgbLabels:
     DZ  "[$__,$__] R   G   B   (9b:$___)"
     ;    012345678901234567890123456789
-TxtColorByte1st EQU UlaRgbLabels+2
-TxtColorByte2nd EQU UlaRgbLabels+6
-TxtColorRed     EQU UlaRgbLabels+12
-TxtColorGreen   EQU UlaRgbLabels+16
-TxtColorBlue    EQU UlaRgbLabels+20
-TxtColor9bit    EQU UlaRgbLabels+27
+TxtColorByte1st EQU UlaRgbLabels+2,10
+TxtColorByte2nd EQU UlaRgbLabels+6,10
+TxtColorRed     EQU UlaRgbLabels+12,10
+TxtColorGreen   EQU UlaRgbLabels+16,10
+TxtColorBlue    EQU UlaRgbLabels+20,10
+TxtColor9bit    EQU UlaRgbLabels+27,10
 
 keyboardDebounce:
         DB      0
@@ -65,8 +65,8 @@ someMouse:
     INCBIN "Envious Bold.ch8"   ; "Envious" font by DamienG https://damieng.com/zx-origins
 
 BREAK_HOLD_INIT EQU     255-50  ; cca. 1sec
-BREAK_ATTR_ADR  EQU     $DAE5
-EXIT_ATTR_ADR   EQU     $DAED
+BREAK_ATTR_ADR  EQU     $DAE5,10
+EXIT_ATTR_ADR   EQU     $DAED,10
 breakHoldCounter:
         DB      BREAK_HOLD_INIT
 
@@ -655,7 +655,7 @@ drawColorTilesAtHl:
         pop     bc
         ret
 
-UlaPalName      EQU $D0A0
+UlaPalName      EQU $D0A0,10
 palettesNamesPtrs:
         DW      palette0Name, palette1Name, palette2Name, palette3Name
 
@@ -858,5 +858,5 @@ stack:  DW      $AAAA
     IFNDEF LAUNCH_EMULATOR : DEFINE LAUNCH_EMULATOR 0 : ENDIF
     IF 0 == __ERRORS__ && 0 == __WARNINGS__ && 1 == LAUNCH_EMULATOR
 ;         SHELLEXEC "runzeseruse show512.nex"
-        SHELLEXEC "runCSpect -brk -map=show512.map show512.nex"
+        SHELLEXEC "( sleep 0.1s ; runCSpect -brk -map=show512.map show512.nex ) &"
     ENDIF
