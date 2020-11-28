@@ -683,7 +683,7 @@ palettesData:
     ; but 0 in second palette is black #000, and 255 in first palette is white #777
 palettesData_channelSumSorted:
 
-    OPT push listoff
+    OPT push listmc
 n=0
 vb=0
 vr=0
@@ -732,7 +732,7 @@ n=n+1
     ; color table - 2x 512 bytes of 9bit colors going from "0" to "511" (black to white)
     ; the index is used as 9bit color value
 palettesData_9bitIndex:
-    OPT push listoff
+    OPT push listmc
 n=0
     DUP 512
         DB n>>1, n&1
@@ -743,15 +743,15 @@ n=n+1
     ; Layer2 default palette + complement to it (missing colours from default)
     ; index 0..255 is the "missing" colour stuff, 256..511 is Layer2 default palette
 palettesData_L2default:
-    OPT push listoff
+    OPT push listmc
 n=0
-    DUP 256
-        DB n, 1-((n>>1)|n)&1    ; botttom part has the "missing" colours
+    DUP 256             ; bottom part has the "missing" colours
+        DB n, 1-((n>>1)|n)&1
 n=n+1
     EDUP
 n=0
-    DUP 256
-        DB n, ((n>>1)|n)&1      ; upper part has the default palette
+    DUP 256             ; upper part has the default palette
+        DB n, ((n>>1)|n)&1
 n=n+1
     EDUP
     OPT pop
@@ -759,7 +759,7 @@ n=n+1
     ; "artsy" ordering of coulours - this one does NOT display all 512 colours!
 palettesData_artsy:
 
-    OPT push listoff
+    OPT push listmc
 
     MACRO gen_n idx?, vr?, vg?, vb?
             ORG palettesData_artsy + (idx?)*2
