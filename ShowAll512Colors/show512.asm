@@ -2,9 +2,8 @@
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ; requires ZX Spectrum Next with core3.0+
 ;
-; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.17.1+)
-; the source is using currently unreleased (in v1.17.0) "ELSEIF" feature, so
-; you need to build sjasmplus from github or wait for next release (hopefully soon)
+; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.18.0)
+; the source is using currently unreleased features, wait for v1.18.0 release (or build from github)
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -847,10 +846,9 @@ TOTAL_PALETTES  EQU ($-palettesData)/1024
 
     ; reserve space for stack
         BLOCK   1024, $AA   ; $AAAA is debug filler in case of debugging stack
-        BLOCK   10,0        ; avoid non-zero stack data warning of newer sjasmplus (unreleased yet)
 stack:  DW      $AAAA
 
-    SAVENEX OPEN "show512.nex", start, stack, 0, 2
+    SAVENEX OPEN "show512.nex", start, stack, 0, 2  ; nexstack-ok
     SAVENEX CORE 3,0,0 : SAVENEX CFG 0
     SAVENEX AUTO : SAVENEX CLOSE
     CSPECTMAP "show512.map"
