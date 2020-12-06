@@ -118,6 +118,9 @@ head    NEXLOAD_HEADER = $0000      ; use the structure to access the header dat
         ENDIF
     ENDIF
     DISPLAY "Required RAM (0 = 768ki, 1 = 1792ki): ",/D,{b head.RAMREQ},", Required core version: ",/D,{b head.COREVERSION.V_MAJOR},".",/D,{b head.COREVERSION.V_MINOR},".",/D,{b head.COREVERSION.V_SUBMINOR}
+    IF 0 == {b head.COREVERSION.V_MAJOR} && {b head.COREVERSION.V_MINOR}
+        DISPLAY "WARNING: seems the required core major/minor values are swapped"
+    ENDIF
     IF {b head.LOADSCR}
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_NOPAL
             DISPLAY "load screen: +no palette"
@@ -155,10 +158,43 @@ head    NEXLOAD_HEADER = $0000      ; use the structure to access the header dat
     DISPLAY "Preserve next registers (0 = reset to NEX defaults): ",/D,{b head.PRESERVENEXTREG}
     DISPLAY "PC = ",/A,{head.PC}, " | SP = ",/A,{head.SP}
     DISPLAY "Banks to load (counter): ",/D,{b head.NUMBANKS},", code-entry-bank ($C000): ",/D,{b head.ENTRYBANK}
+pcBank = (({head.PC}>>14) * 5) & 7  ; 0, 5, 2, 7
+    IF 7 == pcBank
+pcBank = {b head.ENTRYBANK}
+    ENDIF
+spBank = (({head.SP-1}>>14) * 5) & 7  ; 0, 5, 2, 7
+    IF 7 == spBank
+spBank = {b head.ENTRYBANK}
+    ENDIF
 bankI = 0
-    DUP NEXLOAD_MAX_BANK
-        IF {b head.BANKS + bankI}
-            DISPLAY "+ bank ",/D,bankI
+bankRangeB = -1
+    DUP NEXLOAD_MAX_BANK + 1
+        IF NEXLOAD_MAX_BANK == bankI || 5 == bankI || 2 == bankI || {b head.ENTRYBANK} == bankI || !{b head.BANKS + bankI}
+            ; display previous range
+            IF 0 <= bankRangeB
+                IF (bankI - bankRangeB) < 3 ; 1 or 2 banks -> individual lines
+                    DUP (bankI - bankRangeB)
+                        DISPLAY "+ bank ",/D,bankRangeB
+bankRangeB = bankRangeB + 1
+                    EDUP
+                ELSE    ; 3+ banks -> range line
+                    DISPLAY "+ banks ",/D,bankRangeB,"..",/D,bankI-1
+                ENDIF
+            ENDIF
+bankRangeB = -1     ; reset range
+            ; if one of the mapped banks with extra info (never displayed in range) -> display
+            IF bankI < NEXLOAD_MAX_BANK && {b head.BANKS + bankI}
+                DEFINE+ BANK_PC_INFO ""
+                IF pcBank == bankI : DEFINE+ BANK_PC_INFO " <- PC -<" : ENDIF
+                DEFINE+ BANK_SP_INFO ""
+                IF spBank == bankI : DEFINE+ BANK_SP_INFO " [SP]" : ENDIF
+                IF 5 == bankI : DEFINE+ BANK_INFO " ($4000..$7FFF)",BANK_PC_INFO,BANK_SP_INFO," (WARNING: kills NextZXOS sysvars)" : ENDIF
+                IF 2 == bankI : DEFINE+ BANK_INFO " ($8000..$BFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
+                IF {b head.ENTRYBANK} == bankI : DEFINE+ BANK_INFO " ($C000..$FFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
+                DISPLAY "+ bank ",/D,bankI,BANK_INFO
+            ENDIF
+        ELSEIF -1 == bankRangeB     ; regular bank starting new range
+bankRangeB = bankI
         ENDIF
 bankI = bankI + 1
     EDUP
@@ -169,5 +205,5 @@ bankI = bankI + 1
             DISPLAY "NEX file handle written to: ",/A,{head.FILEHANDLERET}
         ENDIF
     ELSE
-        DISPLAY "NEX file will be closed after load (no file handle) passed."
+        DISPLAY "NEX file will be closed after load (no file handle passed)."
     ENDIF
