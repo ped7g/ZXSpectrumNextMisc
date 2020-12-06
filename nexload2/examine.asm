@@ -19,6 +19,25 @@
     ORG 0
     INCBIN NEX_FILE, 0, 512     ; read only header into memory at ORG0
 
+    ; get real file length (can't be done with sj native directives, lua script needed)
+    LUA ALLPASS
+        fnameDef = sj.get_define("NEX_FILE")
+        fnameFirst = string.char(string.byte(fnameDef))
+        fnameLast = string.char(string.byte(fnameDef,-1))
+        if '"' == fnameFirst and '"' == fnameLast then  -- strip quotes from fnameDef
+            fnameDef = string.sub(fnameDef, 2, string.len(fnameDef)-1)
+        end
+        nexfile = io.open(fnameDef,"r")
+        if nexfile then
+            fsize = nexfile:seek("end")
+            io.close(nexfile)
+            sj.insert_label("NEX_SIZE", fsize)
+        else
+            sj.insert_label("NEX_SIZE", 0)
+        end
+    ENDLUA
+    ASSERT 0 < NEX_SIZE
+
 ;-------------------------------
 ; internal struct definitions
 
@@ -117,30 +136,40 @@ head    NEXLOAD_HEADER = $0000      ; use the structure to access the header dat
             DISPLAY "WARNING: V1.3 is unofficial extension by Ped7g, not supportted by NextZXOS .nexload"
         ENDIF
     ENDIF
-    DISPLAY "Required RAM (0 = 768ki, 1 = 1792ki): ",/D,{b head.RAMREQ},", Required core version: ",/D,{b head.COREVERSION.V_MAJOR},".",/D,{b head.COREVERSION.V_MINOR},".",/D,{b head.COREVERSION.V_SUBMINOR}
+    IF {b head.RAMREQ} : DEFINE+ RAMREQ_INFO " (1792ki)" : ELSE : DEFINE+ RAMREQ_INFO " (768ki)" : ENDIF
+    DEFINE CORE_VERSION /D,{b head.COREVERSION.V_MAJOR},".",/D,{b head.COREVERSION.V_MINOR},".",/D,{b head.COREVERSION.V_SUBMINOR}
+    DISPLAY "Required RAM: ",/D,{b head.RAMREQ},RAMREQ_INFO,", Required core version: ",CORE_VERSION
     IF 0 == {b head.COREVERSION.V_MAJOR} && {b head.COREVERSION.V_MINOR}
         DISPLAY "WARNING: seems the required core major/minor values are swapped"
     ENDIF
+palSize = 0
+screenSize = 0
     IF {b head.LOADSCR}
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_NOPAL
             DISPLAY "load screen: +no palette"
         ELSEIF {b head.LOADSCR} & NEXLOAD_LOADSCR_HASPAL
             DISPLAY "load screen: +palette"
+palSize = 512
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_LAYER2
             DISPLAY "load screen: layer2 256x192 8bpp"
+screenSize = screenSize + 256*192
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_ULA
             DISPLAY "load screen: ULA 256x192 6912B"
+screenSize = screenSize + 6912
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_LORES
             DISPLAY "load screen: LoRes 128x96 8bpp"
+screenSize = screenSize + 128*96
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_HIRES
             DISPLAY "load screen: Timex HiRes 512x192 1bpp Color 0..7: ",/D,{b head.HIRESCOL}/8
+screenSize = screenSize + 2*32*192
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_HICOL
             DISPLAY "load screen: Timex HiCol 256x192 8x1 attributes"
+screenSize = screenSize + 2*32*192
         ENDIF
         IF {b head.LOADSCR} & NEXLOAD_LOADSCR_EXT2
             DISPLAY "load screen: +V1.3 extensions (TODO to display)"
@@ -155,14 +184,23 @@ head    NEXLOAD_HEADER = $0000      ; use the structure to access the header dat
         DISPLAY "Border colour: ",/D,{b head.BORDERCOL},", no progress bar"
     ENDIF
     DISPLAY "Delay after each bank: ",/D,{b head.LOADDELAY},", before start: ",/D,{b head.STARTDELAY}
-    DISPLAY "Preserve next registers (0 = reset to NEX defaults): ",/D,{b head.PRESERVENEXTREG}
+    IF {b head.PRESERVENEXTREG} : DEFINE+ PRESERVE_INFO " (preserve current)" : ELSE : DEFINE+ PRESERVE_INFO " (reset to NEX defaults)" : ENDIF
+    DISPLAY "Preserve next registers: ",/D,{b head.PRESERVENEXTREG},PRESERVE_INFO
+    IF 0 < palSize : DEFINE+ PAL_SIZE_INFO ," + ",/D,palSize," (pal)" : ELSE : DEFINE+ PAL_SIZE_INFO : ENDIF
+    IF 0 < screenSize : DEFINE+ SCREEN_SIZE_INFO ," + ",/D,screenSize," (screen(s))" : ELSE : DEFINE+ SCREEN_SIZE_INFO : ENDIF
+banksSize = {b head.NUMBANKS}*(1<<14)
+    IF 0 < banksSize : DEFINE+ BANKS_SIZE_INFO ," + ",/D,banksSize," (banks)" : ELSE : DEFINE+ BANKS_SIZE_INFO : ENDIF
+dataSize = NEX_SIZE - (512 + palSize + screenSize + banksSize)
+    IF 0 < dataSize : DEFINE+ DATA_SIZE_INFO ," + ",/D,dataSize," (data)" : ELSE : DEFINE+ DATA_SIZE_INFO : ENDIF
+totalSize = 512 + palSize + screenSize + banksSize + dataSize
+    DISPLAY "File size: 512 (header)" PAL_SIZE_INFO SCREEN_SIZE_INFO BANKS_SIZE_INFO DATA_SIZE_INFO," = ",/D,totalSize
     DISPLAY "PC = ",/A,{head.PC}, " | SP = ",/A,{head.SP}
     DISPLAY "Banks to load (counter): ",/D,{b head.NUMBANKS},", code-entry-bank ($C000): ",/D,{b head.ENTRYBANK}
 pcBank = (({head.PC}>>14) * 5) & 7  ; 0, 5, 2, 7
     IF 7 == pcBank
 pcBank = {b head.ENTRYBANK}
     ENDIF
-spBank = (({head.SP-1}>>14) * 5) & 7  ; 0, 5, 2, 7
+spBank = (((({head.SP}-1)>>14)&3) * 5) & 7  ; 0, 5, 2, 7 WRT "SP-1"
     IF 7 == spBank
 spBank = {b head.ENTRYBANK}
     ENDIF
