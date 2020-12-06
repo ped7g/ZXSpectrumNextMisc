@@ -1,0 +1,7 @@
+#!/bin/bash
+# Run "nexload2/examine.asm" script over the provided NEX file
+# (the NEX needs full path to make INCBIN work from where examine.asm is located,
+# so the script does figure the path of file for you and build the argument)
+NEXLOAD2DIR=$(dirname $(realpath $0))/../nexload2
+NEX_FILE=`readlink -f "$1"` && \
+sjasmplus --msg=war ${NEXLOAD2DIR}/examine.asm -DNEX_FILE=\"${NEX_FILE}\"
