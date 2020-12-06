@@ -169,7 +169,7 @@ spBank = {b head.ENTRYBANK}
 bankI = 0
 bankRangeB = -1
     DUP NEXLOAD_MAX_BANK + 1
-        IF NEXLOAD_MAX_BANK == bankI || 5 == bankI || 2 == bankI || {b head.ENTRYBANK} == bankI || !{b head.BANKS + bankI}
+        IF NEXLOAD_MAX_BANK == bankI || 5 == bankI || 2 == bankI || {b head.ENTRYBANK} == bankI || 8 == bankI || !{b head.BANKS + bankI}
             ; display previous range
             IF 0 <= bankRangeB
                 IF (bankI - bankRangeB) < 3 ; 1 or 2 banks -> individual lines
@@ -188,6 +188,7 @@ bankRangeB = -1     ; reset range
                 IF pcBank == bankI : DEFINE+ BANK_PC_INFO " <- PC -<" : ENDIF
                 DEFINE+ BANK_SP_INFO ""
                 IF spBank == bankI : DEFINE+ BANK_SP_INFO " [SP]" : ENDIF
+                IF 8 == bankI : DEFINE+ BANK_INFO BANK_PC_INFO,BANK_SP_INFO," (WARNING: kills NextZXOS browser data)" : ENDIF
                 IF 5 == bankI : DEFINE+ BANK_INFO " ($4000..$7FFF)",BANK_PC_INFO,BANK_SP_INFO," (WARNING: kills NextZXOS sysvars)" : ENDIF
                 IF 2 == bankI : DEFINE+ BANK_INFO " ($8000..$BFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
                 IF {b head.ENTRYBANK} == bankI : DEFINE+ BANK_INFO " ($C000..$FFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
