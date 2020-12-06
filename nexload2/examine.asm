@@ -24,7 +24,8 @@
         fnameDef = sj.get_define("NEX_FILE")
         fnameFirst = string.char(string.byte(fnameDef))
         fnameLast = string.char(string.byte(fnameDef,-1))
-        if '"' == fnameFirst and '"' == fnameLast then  -- strip quotes from fnameDef
+        -- strip quotes/apostrophes from fnameDef (they are there for INCBIN in asm part)
+        if fnameFirst == fnameLast and ('"' == fnameFirst or "'" == fnameFirst) then
             fnameDef = string.sub(fnameDef, 2, string.len(fnameDef)-1)
         end
         nexfile = io.open(fnameDef,"r")
