@@ -14,7 +14,7 @@
     IFNDEF NEX_FILE
         DEFINE NEX_FILE "some.nex"
     ENDIF
-    DEVICE ZXSPECTRUMNEXT
+    DEVICE ZXSPECTRUMNEXT : OPT -Wno-backslash
 
     ORG 0
     INCBIN NEX_FILE, 0, 512     ; read only header into memory at ORG0
@@ -195,7 +195,8 @@ dataSize = NEX_SIZE - (512 + palSize + screenSize + banksSize)
     IF 0 < dataSize : DEFINE+ DATA_SIZE_INFO ," + ",/D,dataSize," (data)" : ELSE : DEFINE+ DATA_SIZE_INFO : ENDIF
 totalSize = 512 + palSize + screenSize + banksSize + dataSize
     DISPLAY "File size: 512 (header)" PAL_SIZE_INFO SCREEN_SIZE_INFO BANKS_SIZE_INFO DATA_SIZE_INFO," = ",/D,totalSize
-    DISPLAY "PC = ",/A,{head.PC}, " | SP = ",/A,{head.SP}
+    IF 0 < {head.PC} : DEFINE+ PCVAL_INFO /A,{head.PC} : ELSE : DEFINE+ PCVAL_INFO "no start" : ENDIF
+    DISPLAY "PC = ",PCVAL_INFO, " | SP = ",/A,{head.SP}
     DISPLAY "Banks to load (counter): ",/D,{b head.NUMBANKS},", code-entry-bank ($C000): ",/D,{b head.ENTRYBANK}
 pcBank = (({head.PC}>>14) * 5) & 7  ; 0, 5, 2, 7
     IF 7 == pcBank
