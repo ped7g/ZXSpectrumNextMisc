@@ -284,6 +284,7 @@ durationPickTable:
     ; reserve space for stack
         BLOCK   1024, $AA   ; $AAAA is debug filler in case of debugging stack
 stack:  DW      $AAAA
-    SAVENEX OPEN "fadeout.nex", start, stack, 0, 2 : SAVENEX CORE 3,0,0 : SAVENEX CFG 0
+    SAVENEX OPEN "fadeout.nex", start, stack, 0, 2  ; nexstack-ok
+    SAVENEX CORE 3,0,0 : SAVENEX CFG 0
     SAVENEX AUTO : SAVENEX CLOSE
     CSPECTMAP "fadeout.map"
