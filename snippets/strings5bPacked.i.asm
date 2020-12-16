@@ -11,7 +11,7 @@
 decode      ld      a,%1000'0000    ; A = (packed) data-byte ($80 to get CF=1 at first add a,a)
 .readChar   ld      c,%0000'1000    ; C = decoded byte, ($08 as end-of-5b-value marker)
 .bitLoop    add     a,a             ; extract top bit from data-byte, detect empty by ZF=1
-            jr      nz,.readBit     ; if ZF=0, the extract bit is data, add it to C
+            jr      nz,.readBit     ; if ZF=0, the extracted bit is data, add it to C
             ld      a,(de)          ; if ZF=1, the extracted bit was end-of-data marker
             inc     de              ; A = new data byte, DE++ (CF is still set here!)
             rla                     ; extract top data bit, add end-of-data marker from CF
