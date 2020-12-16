@@ -19,6 +19,8 @@
     INCLUDE "findVLinesCount.i.asm"
     INCLUDE "comparisons.i.asm"
     IFDEF _INCLUDE_COMPARISONS_TESTS_ : INCLUDE "comparisons.test.i.asm" : ENDIF
+    INCLUDE "strings5bPacked.i.asm"
+    ASSERT $ <= $C000
 
     ;; main "test" code displaying snippet addresses and waiting for some key to run few
     ORG $C000
@@ -85,7 +87,14 @@ test_start:
     ; snippet Comparison Examples from comparisons.i.asm
     call    comparisons.run
     IFDEF _INCLUDE_COMPARISONS_TESTS_ : call comparisons.test : ENDIF
-    
+
+    ; snippet 5-bit packed strings
+    ld      de,str5b.example_Packed
+    ld      hl,str5b.example_Unpacked
+    ld      b,str5b.numOfExampleStrings
+.decodeStrings:
+    call    str5b.decode
+    djnz    .decodeStrings
 
     ;; refresh screen and snippets texts and wait again for key
     jr      .refresh_screen
@@ -157,14 +166,19 @@ test_t3:
 .e:
 
 test_s0:
-    DB  .e-.s, 4, 9
+    DB  .e-.s,  4,  9
 .s: test_txt_hexadr findVLinesCount, "findVLinesCount [$"
 .v: DB  "????]"
 .e:
 
 test_s1:
-    DB  .e-.s, 40, 9
+    DB  .e-.s, 40,  9
 .s: test_txt_hexadr comparisons.run, "Comparison examples"
+.e:
+
+test_s2:
+    DB  .e-.s,  4, 10
+.s: test_txt_hexadr str5b.decode, "19B 5b-packed-string decode"
 .e:
 
 ; test_texts list terminator
@@ -177,3 +191,10 @@ test_stack EQU 0                ; put stack at the very end of Bank0
     SAVENEX OPEN "runsnippet.nex", test_start, test_stack : SAVENEX CFG 7
     SAVENEX BANK 2, 0
     SAVENEX CLOSE
+    CSPECTMAP "runsnippet.map"
+
+    IFNDEF LAUNCH_EMULATOR : DEFINE LAUNCH_EMULATOR 0 : ENDIF
+    IF 0 == __ERRORS__ && 0 == __WARNINGS__ && 1 == LAUNCH_EMULATOR
+;         SHELLEXEC "runzeseruse show512.nex"
+        SHELLEXEC "( sleep 0.1s ; runCSpect -brk -map=runsnippet.map runsnippet.nex ) &"
+    ENDIF
