@@ -8,19 +8,19 @@
 ; ! for the price of +2B and 0 becoming '@' you can convert to ASCII with added `set 6,c`
 ; Authors of code: Busy, Baze, Zilog (Ped - reviews + sjasmplus encoder)
 
-decode      ld      a,%1000'0000
-.readChar   ld      c,%0000'1000
-.bitLoop    add     a,a
-            jr      nz,.readBit
-            ld      a,(de)
-            inc     de
-            adc     a,a
-.readBit    rl      c
-            jr      nc,.bitLoop
+decode      ld      a,%1000'0000    ; A = (packed) data-byte ($80 to get CF=1 at first add a,a)
+.readChar   ld      c,%0000'1000    ; C = decoded byte, ($08 as end-of-5b-value marker)
+.bitLoop    add     a,a             ; extract top bit from data-byte, detect empty by ZF=1
+            jr      nz,.readBit     ; if ZF=0, the extract bit is data, add it to C
+            ld      a,(de)          ; if ZF=1, the extracted bit was end-of-data marker
+            inc     de              ; A = new data byte, DE++ (CF is still set here!)
+            rla                     ; extract top data bit, add end-of-data marker from CF
+.readBit    rl      c               ; add data bit to C, detect end-of-5b-value marker
+            jr      nc,.bitLoop     ; if CF=0, the marker was not reached yet, keep decoding
         ;   set     6,c     ; +2B to convert 0 -> '@', 1..26 -> 'A'..'Z', 27..31 -> "[\]^_"
-            ld      (hl),c
+            ld      (hl),c          ; if CF=1, 5 bits were decoded into byte, store it
             inc     hl
-            jr      nz,.readChar
+            jr      nz,.readChar    ; repeat until zero-terminator is decoded and stored
             ret
 
 ;--------------------------------------------------------------------------------------------
