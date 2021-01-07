@@ -8,6 +8,7 @@
 ;  purposes and after keypress it runs some of the snippets
 
     DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_DIV_10_TESTS_ ; addd rigorous tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -20,6 +21,8 @@
     INCLUDE "comparisons.i.asm"
     IFDEF _INCLUDE_COMPARISONS_TESTS_ : INCLUDE "comparisons.test.i.asm" : ENDIF
     INCLUDE "strings5bPacked.i.asm"
+    INCLUDE "div10.i.asm"
+    IFDEF _INCLUDE_DIV_10_TESTS_ : INCLUDE "div10.test.i.asm" : ENDIF
     ASSERT $ <= $C000
 
     ;; main "test" code displaying snippet addresses and waiting for some key to run few
@@ -81,7 +84,7 @@ test_start:
 
     ; snippet findVLinesCount from findVLinesCount.i.asm
     call    findVLinesCount
-    ld      de,test_s0.v
+    ld      de,test_findVLinesCount.v
     call    test_HL_to_hex_at_de
 
     ; snippet Comparison Examples from comparisons.i.asm
@@ -95,6 +98,19 @@ test_start:
 .decodeStrings:
     call    str5b.decode
     djnz    .decodeStrings
+
+    ; snippets for "E div 10"
+    ; variant "A", 9 bytes, 40T, returns result as 8.5 fixed point in DE, modifies B,DE
+    ld      e,69
+    call    div10.eDiv10A
+    ; variant "B", 14 bytes, 60T, returns result as 8.8 fixed point in DE, modifies A,DE
+    ld      e,69
+    call    div10.eDiv10B
+    ; variant "C", 7 bytes, 33T, returns 8bit result in D for E=0..127, modifies F,DE
+    ld      e,69
+    call    div10.eDiv10C
+    ; rigorous tests doing 0..255/0..255/0..127 for all three variants
+    IFDEF _INCLUDE_DIV_10_TESTS_ : call div10.test : ENDIF
 
     ;; refresh screen and snippets texts and wait again for key
     jr      .refresh_screen
@@ -165,20 +181,35 @@ test_t3:
 .s: DB  "Code snippets:"
 .e:
 
-test_s0:
+test_findVLinesCount:
     DB  .e-.s,  4,  9
 .s: test_txt_hexadr findVLinesCount, "findVLinesCount [$"
 .v: DB  "????]"
 .e:
 
-test_s1:
+test_Comparison:
     DB  .e-.s, 40,  9
 .s: test_txt_hexadr comparisons.run, "Comparison examples"
 .e:
 
-test_s2:
+test_5bDecode:
     DB  .e-.s,  4, 10
 .s: test_txt_hexadr str5b.decode, "19B 5b-packed-string decode"
+.e:
+
+test_div10A:
+    DB  .e-.s,  4, 11
+.s: test_txt_hexadr div10.eDiv10A, "a) E-Div-10: 9B (FixPt 8.5)"
+.e:
+
+test_div10B:
+    DB  .e-.s,  4, 12
+.s: test_txt_hexadr div10.eDiv10B, "b) E-Div-10: 14B (FixPt 8.8)"
+.e:
+
+test_div10C:
+    DB  .e-.s,  4, 13
+.s: test_txt_hexadr div10.eDiv10C, "c) E-Div-10: 7B (0..127)"
 .e:
 
 ; test_texts list terminator
