@@ -14,4 +14,4 @@ detectZ80N:
 
     ; if you think you can optimize/shorten this, consider effects of your changes
     ; on non-Z80 and non-Z80N CPUs (this should be quite optimal test while keeping
-    ; it at this level of robustness, optimazations may make it more fragile)
+    ; it at this level of robustness, optimizations may make it more fragile)
