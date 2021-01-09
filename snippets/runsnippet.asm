@@ -21,6 +21,7 @@
     INCLUDE "comparisons.i.asm"
     IFDEF _INCLUDE_COMPARISONS_TESTS_ : INCLUDE "comparisons.test.i.asm" : ENDIF
     INCLUDE "strings5bPacked.i.asm"
+    INCLUDE "detectZ80N.i.asm"
     INCLUDE "div10.i.asm"
     IFDEF _INCLUDE_DIV_10_TESTS_ : INCLUDE "div10.test.i.asm" : ENDIF
     ASSERT $ <= $C000
@@ -98,6 +99,10 @@ test_start:
 .decodeStrings:
     call    str5b.decode
     djnz    .decodeStrings
+
+    ; snippet detectZ80N
+    call    detectZ80N
+    nextreg TILEMAP_DEFAULT_ATTR_NR_6C,a    ; will ruin the screen output if A was not zero
 
     ; snippets for "E div 10"
     ; variant "A", 9 bytes, 40T, returns result as 8.5 fixed point in DE, modifies B,DE
@@ -195,6 +200,11 @@ test_Comparison:
 test_5bDecode:
     DB  .e-.s,  4, 10
 .s: test_txt_hexadr str5b.decode, "19B 5b-packed-string decode"
+.e:
+
+test_detectZ80N:
+    DB  .e-.s, 40, 10
+.s: test_txt_hexadr detectZ80N, "Detect Z80N CPU"
 .e:
 
 test_div10A:
