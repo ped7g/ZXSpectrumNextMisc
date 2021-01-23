@@ -117,9 +117,8 @@ DetectMode:
                 jr      nz,.pentagonDetected
                 swapnib a
                 and     $03             ; A = (0|1)/2/3 for zx48/zx128/pentagon
-                jr      nz,.hdmiDetected    ; 1/2/3 -> just add 50/60Hz and return
-                inc     a               ; 0->1 to end as ZX48
-.hdmiDetected:  add     a,b             ; add 50/60Hz value to final result
+                cp      1               ; turn 0 into 1 (config mode is treated as ZX48)
+.hdmiDetected:  adc     a,b             ; add 50/60Hz value to final result
                 ret
 .pentagonDetected:
                 ld      a,MODE_PENTAGON
@@ -154,9 +153,10 @@ GetMargins:
                 ret
             ; for invalid index return 4x 255
 .invalidModeIndex:
-                ld      bc,$FFFF
-                push    bc
-                pop     de
+                ld      b,$FF
+                ld      c,b
+                ld      d,b
+                ld      e,b
                 ret
 
 ;;----------------------------------------------------------------------------------------
@@ -199,29 +199,25 @@ ParseCfgFile:
                 ld      (.oldSP),sp
                 ld      (.MarginsPtr),de
                 push    bc
-                push    hl
-                push    hl
             ; initialize margins array to all -1
-                ld      h,d
-                ld      l,e
-                ld      (hl),-1
-                inc     de
-                ld      bc,S_MARGINS * MODE_COUNT - 1
-                ldir
+                ld      a,-1
+                ld      b,S_MARGINS * MODE_COUNT
+.fillMarginArray:
+                ldi     (de),a          ; fake: ld (de),a : inc de
+                djnz    .fillMarginArray
             ; open the file - use both HL + IX for filename, to work as dot command or app
-                pop     hl
+                push    hl
                 pop     ix
-                ld      a,'$'           ; system drive (if not overriden in by fname)
-                ld      b,$01           ; read-only
+                ld      a,'$'           ; system drive (if not overridden in fname)
+                inc     b               ; B = $01 (read-only)
                 rst     $08 : DB $9A    ; F_OPEN
                 pop     hl              ; HL = buffer pointer
                 ret     c               ; F_OPEN failed, return with carry set + A=error
                 ld      (.Fhandle),a
             ; load full buffer in two 128B steps (to make zero-terminator logic work!)
-                ld      l,$80           ; L=$80 to load first half of buffer
-                call    .readBuffer
-                ld      l,b             ; L=0 to load second half of buffer
-                call    .readBuffer
+                call    .readBuffer     ; read the *other* half of buffer at $xx80 (!)
+                ld      l,$80           ; L=$80 to load $xx00 half of buffer
+                call    .readBuffer     ; and start parsing from the $xx80
                 call    .parseNewLineLoop
             ; F_CLOSE the file
                 ld      a,(.Fhandle)
@@ -233,30 +229,30 @@ ParseCfgFile:
 .getCh:
                 ld      a,(hl)
                 inc     l
-                jp      pe,.readBuffer  ; $xx7F -> $xx80, load first 128B of buffer
-                ret     nz              ; $xxFF -> $xx00 is Fz=1 -> load second 128B
+                jr      z,.readBuffer   ; $xxFF -> $xx00 is Fz=1 -> load second half of buffer
+                ret     po              ; not $xx7F -> $xx80, don't load first half of buffer
 .readBuffer:
             ; buffer is half-empty, read further 128 bytes
-                ld      bc,$80
-                push    af              ; char read
+                push    af              ; already read char
                 push    hl              ; address of next char
-                ; advance HL by $80, to read one buffer ahead
+                push    de              ; preserve DE (is working register for parser)
+                ld      bc,$80
+                ; flip L by $80, to read other buffer half
                 ld      a,l
-                add     a,c
+                xor     c
                 ld      l,a
                 push    hl
                 pop     ix
 .Fhandle=$+1:   ld      a,low .Fhandle  ; self-modify storage for handle
-                push    de              ; preserve DE (is working register for parser)
                 rst     $08 : DB $9D    ; F_READ: A = file handle, HL+IX = address, BC = bytes to read
                 jr      c,.esxError
                 ; BC=DE=bytes read, HL+=BC
                 ; CSpect 2.12.5 w/o full NextZXOS returns always HL + original_BC (emu bug)
-                pop     de
                 bit     7,c
                 jr      nz,.full128BytesRead
-                ld      (hl),0          ; add null terminator after last read byte
+                ld      (hl),b          ; add null terminator after last read byte
 .full128BytesRead:
+                pop     de
                 pop     hl              ; restore current address
                 pop     af              ; restore the char read
                 ret
