@@ -1,6 +1,7 @@
 ;-------------------------------
 ; .DISPLAYEDGE
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
+; project repository: https://github.com/ped7g/ZXSpectrumNextMisc (report issues here)
 ;
 ; Displays green rectangle in tilemap 640x256x4 mode at the user defined edge and let
 ; the user further adjust per-pixel which pixels are well visible on his display. The
@@ -22,6 +23,7 @@
 ; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
+; v2.1  23/01/2021 P7G    Fix: $07 and $2F nextregs were not restoring original value
 ; v2.0  30/10/2020 P7G    New control scheme using arrows and "active corner"
 ;                           slightly adjusted UI look
 ; v1.4  28/10/2020 P7G    More robust Z80N CPU check, fix one case of "\n" EOL (to "\r\n")
@@ -250,12 +252,12 @@ start:
         inc     hl
         djnz    .preserveStateLoop
         ; patch the turbo_07 and tile_xofs_msb_2F values to clear reserved bits
-        ld      a,(preserved.turbo_07)
+        ld      a,(preserved.turbo_07+1)
         and     3
-        ld      (preserved.turbo_07),a
-        ld      a,(preserved.tile_xofs_msb_2F)
+        ld      (preserved.turbo_07+1),a
+        ld      a,(preserved.tile_xofs_msb_2F+1)
         and     3
-        ld      (preserved.tile_xofs_msb_2F),a
+        ld      (preserved.tile_xofs_msb_2F+1),a
 
     ;; parse the arguments on command line
         ;ld      hl,(state.argsPtr)
@@ -1703,5 +1705,8 @@ testStart
 testFakeArgumentsLine   DZ  " nothing yet ..."
 
         SAVESNA "DISPLAYEDGE.SNA",testStart
-;         CSPECTMAP
+
+        IFDEF LAUNCH_EMULATOR : IF 0 == __ERRORS__ && 0 == __WARNINGS__
+            SHELLEXEC "( sleep 0.1s ; runCSpect -brk DISPLAYEDGE.SNA ) &"
+        ENDIF : ENDIF
     ENDIF

@@ -1,6 +1,7 @@
 ;-------------------------------
 ; DISPLAYEDGE runtime library
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
+; project repository: https://github.com/ped7g/ZXSpectrumNextMisc (report issues here)
 ;
 ; Runtime functions to read config file from system, detect video mode and figure out
 ; user's settings for current mode
@@ -411,6 +412,7 @@ keywordsModes:                      ; (less than 128 chars per keyword)
                 DB      0           ; end of keywords
 
 End:
+    DISPLAY "dspedge module (runtime part) machine code size: ",/D,End-Begin
     ENDMODULE
 
     IFDEF DISPLAYEDGE_ORG_ADR
