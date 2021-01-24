@@ -441,7 +441,7 @@ End:
         ; when assembling with DISPLAYEDGE_ORG_ADR defined, produce also export file
         ; use "--exp=displayedge_rt.exp" to define the export name on command line
         EXPORT dspedge.Begin
-        IFNDEF USE_TO_READ_NEXT_REG
+        IFUSED dspedge.ReadNextReg
             EXPORT dspedge.ReadNextReg
         ENDIF
         EXPORT dspedge.DetectMode
