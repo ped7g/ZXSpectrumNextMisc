@@ -23,6 +23,7 @@
 ; TODO maybe CLI edit mode to write values for particular mode without interactive part
 ;
 ; Changelist:
+; v2.2  23/01/2021 P7G    Refactored "runtime" part to make it smaller
 ; v2.1  23/01/2021 P7G    Fix: $07 and $2F nextregs were not restoring original value
 ; v2.0  30/10/2020 P7G    New control scheme using arrows and "active corner"
 ;                           slightly adjusted UI look
@@ -575,16 +576,27 @@ HandleControls:
         ret
 
 ;-------------------------------
+saveModeKeyword:
+.h_5            DZ      'edge_hdmi_50'
+.z4_5           DZ      'edge_zx48_50'
+.z1_5           DZ      'edge_zx128_50'
+.z3_5           DZ      'edge_zx128p3_50'
+.h_6            DZ      'edge_hdmi_60'
+.z4_6           DZ      'edge_zx48_60'
+.z1_6           DZ      'edge_zx128_60'
+.z3_6           DZ      'edge_zx128p3_60'
+.p              DZ      'edge_pentagon'
+
 EdgesData:
-.hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00, dspedge.keywordsModes.h_5  }}
-.z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0, dspedge.keywordsModes.z4_5 }}
-.z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0, dspedge.keywordsModes.z1_5 }}
-.z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0, dspedge.keywordsModes.z3_5 }}
-.hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00, dspedge.keywordsModes.h_6  }}
-.z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0, dspedge.keywordsModes.z4_6 }}
-.z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0, dspedge.keywordsModes.z1_6 }}
-.z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0, dspedge.keywordsModes.z3_6 }}
-.pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90, dspedge.keywordsModes.p    }}
+.hdmi_50    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+35, $00, saveModeKeyword.h_5  }}
+.z48_50     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+35, $A0, saveModeKeyword.z4_5 }}
+.z128_50    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+35, $B0, saveModeKeyword.z1_5 }}
+.z128p3_50  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+35, $C0, saveModeKeyword.z3_5 }}
+.hdmi_60    S_MODE_EDGES    {{},{},{ $4000+ 8*80+23, $4000+ 7*80+54, $00, saveModeKeyword.h_6  }}
+.z48_60     S_MODE_EDGES    {{},{},{ $4000+12*80+23, $4000+11*80+54, $A0, saveModeKeyword.z4_6 }}
+.z128_60    S_MODE_EDGES    {{},{},{ $4000+16*80+23, $4000+15*80+54, $B0, saveModeKeyword.z1_6 }}
+.z128p3_60  S_MODE_EDGES    {{},{},{ $4000+20*80+23, $4000+19*80+54, $C0, saveModeKeyword.z3_6 }}
+.pentagon   S_MODE_EDGES    {{},{},{ $4000+24*80+23, $4000+23*80+35, $90, saveModeKeyword.p    }}
 
 state:      S_STATE     {0, 0, 0}
 
@@ -824,10 +836,10 @@ SaveCfgFile:
         rlc     c
         jr      nz,.noKeywordYet
         ; not in comment, check if the mode keyword is in file
-        call    dspedge.isKeyword   ; ZF=0 no match, ZF=1 match, HL points after, A=0..8 match number
-        jr      nz,.noKeywordYet
+        call    dspedge.matchKeyword ; ZF=1 no match, ZF=0 match, HL points after, A=0..8 match number
+        jr      z,.noKeywordYet
     ;   if keyword is detected (doesn't even check for "=", word boundary is enough)
-        ; (that I can't easily rewind old file if "=" is missing, so just ignoring...)
+        ; (b/c I can't easily rewind old file if "=" is missing, so just ignoring...)
         ; calculate address of mode structure
         ld      e,a
         ld      d,S_MODE_EDGES
@@ -1678,6 +1690,11 @@ topan_pxmask=topan_pxmask>>2
             EDUP
         EDUP
     OPT pop
+
+diagBinSz   EQU     last-start
+diagBinPcHi EQU     (100*diagBinSz)/8192
+diagBinPcLo EQU     ((100*diagBinSz)%8192)*10/8192
+    DISPLAY "Binary size: ",/D,diagBinSz," (",/D,diagBinPcHi,".",/D,diagBinPcLo,"% of dot command 8kiB)"
 
     IFNDEF TESTING
         SAVEBIN "DISPLAYEDGE",start,last-start

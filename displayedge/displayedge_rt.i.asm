@@ -19,6 +19,7 @@
 ; the export file (--exp sjasmplus option) to call the binary functions.
 ;
 ; Changelist:
+; v2    23/01/2021 P7G    Refactored to make the runtime smaller (-36 bytes => 434)
 ; v1.2  28/01/2020 P7G    Incorporating the feedback from discord:
 ;                           keywords prefix "edge_", the default cfg: /sys/env.cfg
 ; v1.1  27/01/2020 P7G    Adding GetMargins API and improving docs about usage
@@ -26,7 +27,7 @@
 ; v0    18/01/2020 P7G    Initial version (unfinished)
 ;
 ;-------------------------------
-; # API (list of functions), all symbols inside "dspedge" module:
+; # API (list of functions), all symbols are inside "dspedge" module:
 ; ReadNextReg           - reads nextreg A into A (`-DUSE_TO_READ_NEXT_REG=<yours>` if you have own)
 ; DetectMode            - returns dspedge.MODE_* value (current display mode)
 ; GetMargins            - returns already parsed margins for desired mode
@@ -178,6 +179,10 @@ SanitizeMarginValue:
                 xor     a
                 ret
 
+defaultCfgFileName:
+                DZ      "/sys/env.cfg"  ; zero terminated for esxDOS
+                DB      32|128          ; bit7 terminated for UI of .displayedge tool
+
 ;;----------------------------------------------------------------------------------------
 ;; Read and parse cfg file - use it before using API calls to get margin values for mode
 
@@ -261,8 +266,8 @@ ParseCfgFile:
             ; HL = current buffer
                 call    skipWhiteSpace
                 ; check for known keywords 'hdmi, zx48, zx128, zx128p3, pentagon', else skipToEol
-                call    isKeyword       ; ZF=0 no match, ZF=1 match, HL points after, A=0..8 match number
-                jr      nz,.skipToEol
+                call    matchKeyword    ; ZF=1 no match, ZF=0 match, HL points after, A=0..8 match number
+                jr      z,.skipToEol
                 ld      e,a
                 ; look for "assign" character
                 call    skipWhiteSpace
@@ -341,71 +346,90 @@ ParseFourValuesToDe:
                 call    ParseCfgFile.getCh
                 jr      .parseDigits
 
-isKeyword:
-    ; Fz=0 no match, keeps HL
-    ; Fz=1 match, HL points after, A=match index (0..N)
-                ld      de,keywordsModes
-                ld      bc,$0100    ; match flag + match index
+; ! WARNING, ABI change ! in previous version Fz=1 was "match"
+; (this routine is considered internal, not part of public API, see EXPORT statements
+; near end of file to see what is part of public API, and unlikely to change ever)
+matchKeyword:
+    ; In:   HL=input stream, Modifies: AF, BC (in .getCh), DE, HL
+    ; Out:  Fz=1 no match, preserves HL, A=0
+    ;       Fz=0 match, stream+HL is advanced after keyword, A=keyword index (0,1,...,N)
                 push    hl
-.matchLoop:
-                ld      a,(de)
-                inc     de
-                or      a
-                jr      nz,.keywordContinues
-                djnz    .wordMismatch
-            ; keyword match, check end word boundary, can be anything <= 32 or '=' char
-                ld      a,(hl)
-                cp      ' '+1
-                jr      c,.wordMatch
-                cp      '='
-                jr      nz,.wordMismatch
-.wordMatch:
-            ; keyword did match, return HL advanced, but by "getCh" to keep
-            ; the buffer preload working too
-                pop     de
-                ex      de,hl       ; HL = old HL, DE = target HL, HL != DE (keyword.length != 0)
-                ld      d,c         ; D = match index
-.AdvanceHlLoop:
+                ex      de,hl
+
+            ; search for "edge_" string in input buffer (not advancing stream)
+                ld      hl,.keywordEdge
+                call    .compareKeyword
+                jr      z,.didNotMatchInPrefix
+
+            ; "edge_" did match, now try to match all different video-mode keywords
+                inc     hl          ; HL = keywordsModes ptr (video mode keyword list)
+.tryNextKeywordSuffix:              ; DE = input buffer (after "_"), HL = keyword to try
+                push    de
+                call    .compareKeyword
+                jr      z,.tryNextKeyword   ; did not match, try one more
+            ; keyword did match, check if it ends with "word boundary" character
+                cp      ' '+1       ; anything less/equal to space char is ok
+                jr      c,.keywordFound
+                cp      '='         ; and "assign" directly after mode is ok
+                jr      z,.keywordFound
+
+            ; keyword-suffix didn't match, try another suffix (starting after "edge_")
+                inc     hl          ; start of next keyword
+.tryNextKeyword:
+                pop     de          ; restore buffer pointer
+                bit     7,(hl)      ; check if there is another keyword in list
+                jr      z,.tryNextKeywordSuffix
+            ; all keywords failed, report "no match" result: Fz=1 (!)
+.didNotMatchInPrefix:
+                pop     hl          ; restore original input buffer pointer
+                xor     a
+                ret                 ; ZF=1, HL = original buffer (no keyword match)
+
+            ; keyword was found, advance the input stream beyond it, return its index
+.keywordFound:                      ; E is here: low(end-of-keyword-ptr)
+                ld      d,(hl)      ; terminator of keyword (encodes keyword index)
+                pop     hl          ; throw away ptr after "edge_" keyword
+                pop     hl          ; original buffer, E will be used to advance it
+.advanceStreamLoop:                 ; keep reading input stream until L == E
                 call    ParseCfgFile.getCh
                 ld      a,e
-                cp      l
-                jr      nz,.AdvanceHlLoop   ; also sets Fz=1 to signal match
-                ld      a,d         ; A = match index
-                ret
-.wordMismatch:
-            ; keyword mismatch, reset matching and start comparing with next keyword
-                pop     hl          ; restore original HL
-                ld      b,1         ; reset match flag
-                ld      a,(de)
-                cp      b
-                ret     c           ; if A == 0, return with Fz=0
-            ; new keyword starts here (A = first char already)
-                push    hl
-                inc     de
-                inc     c           ; keyword index
-.keywordContinues:
+                sub     l
+                jr      nz,.advanceStreamLoop
+            ; HL = next char after keyword, D = terminator (encoded index), A = 0, ZF=1
+                or      d           ; ZF=0 (!), A = encoded index (value 128..255)
+                cpl                 ; decode index from terminator value into 0..N value
+                ret                 ; ZF=0, A = keyword index
+
+.compareKeyword:
+                ld      a,(de)      ; character in input buffer
+                bit     7,(hl)
+            ; DE = next char ptr, A = next char, HL = keyword char/terminator ptr
+                ret     nz          ; indicate match with ZF=0
+            ; regular char in keyword, do the compare
+                inc     e           ; ++DE to next character in [circular] input buffer
                 cp      (hl)
-                jr      z,.charDoesMatch
-                inc     b           ; will be in 2..strlen(keyword)+1 range = ok
-.charDoesMatch:
-                inc     l
-                jr      .matchLoop
+                inc     hl          ; compare A with [HL++]
+                jr      z,.compareKeyword
+            ; regular letter mismatch - skip rest of current keyword until terminator
+.letterMismatch:
+                bit     7,(hl)
+                inc     hl          ; HL++ until it points beyond the terminator
+                jr      z,.letterMismatch
+            ; return mismatch: ZF=1, DE = mismatch char ptr, A = 0, HL = next keyword ptr
+                xor     a
+                ret
 
-defaultCfgFileName:
-                DZ      "/sys/env.cfg"  ; zero terminated for esxDOS
-                DB      32|128          ; bit7 terminated for UI of .displayedge tool
-
-keywordsModes:                      ; (less than 128 chars per keyword)
-.h_5            DZ      'edge_hdmi_50'
-.z4_5           DZ      'edge_zx48_50'
-.z1_5           DZ      'edge_zx128_50'
-.z3_5           DZ      'edge_zx128p3_50'
-.h_6            DZ      'edge_hdmi_60'
-.z4_6           DZ      'edge_zx48_60'
-.z1_6           DZ      'edge_zx128_60'
-.z3_6           DZ      'edge_zx128p3_60'
-.p              DZ      'edge_pentagon'
-                DB      0           ; end of keywords
+.keywordEdge    DB      'edge_',128
+.h_5            DB      'hdmi_50',~0    ; the other keywords must follow right after "edge_"
+.z4_5           DB      'zx48_50',~1
+.z1_5           DB      'zx128_50',~2
+.z3_5           DB      'zx128p3_50',~3
+.h_6            DB      'hdmi_60',~4
+.z4_6           DB      'zx48_60',~5
+.z1_6           DB      'zx128_60',~6
+.z3_6           DB      'zx128p3_60',~7
+.p              DB      'pentagon',~8
+                DB      128             ; end of keywords
 
 End:
     DISPLAY "dspedge module (runtime part) machine code size: ",/D,End-Begin
