@@ -208,7 +208,11 @@ spBank = {b head.ENTRYBANK}
     ENDIF
 bankI = 0
 bankRangeB = -1
+missingMemRequired = 0
     DUP NEXLOAD_MAX_BANK + 1
+        IF 48 <= bankI && {b head.BANKS + bankI} && !{b head.RAMREQ}
+missingMemRequired = -1
+        ENDIF
         IF NEXLOAD_MAX_BANK == bankI || 5 == bankI || 2 == bankI || {b head.ENTRYBANK} == bankI || 8 == bankI || !{b head.BANKS + bankI}
             ; display previous range
             IF 0 <= bankRangeB
@@ -239,6 +243,9 @@ bankRangeB = bankI
         ENDIF
 bankI = bankI + 1
     EDUP
+    IF missingMemRequired
+        DISPLAY "WARNING: the file contains bank 48 or higher, but does not have \"require 2MB\" flag set"
+    ENDIF
     IF {head.FILEHANDLERET}
         IF {head.FILEHANDLERET} < $4000
             DISPLAY "NEX file handle passed in BC"
