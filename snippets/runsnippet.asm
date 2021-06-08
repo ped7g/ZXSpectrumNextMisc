@@ -9,6 +9,7 @@
 
     DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_DIV_10_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_320_TESTS_ ; addd rigorous tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -24,6 +25,9 @@
     INCLUDE "detectZ80N.i.asm"
     INCLUDE "div10.i.asm"
     IFDEF _INCLUDE_DIV_10_TESTS_ : INCLUDE "div10.test.i.asm" : ENDIF
+    INCLUDE "mod320.i.asm"
+    IFDEF _INCLUDE_MOD_320_TESTS_ : INCLUDE "mod320.test.i.asm" : ENDIF
+
     ASSERT $ <= $C000
 
     ;; main "test" code displaying snippet addresses and waiting for some key to run few
@@ -34,6 +38,7 @@ tile_map EQU $4400  ; leave $400 for font (map is $A00 bytes long 80x32 up to $4
 
 test_start:
     ;; init tilemode, copy font data, print texts
+    nextreg TURBO_CONTROL_NR_07,3   ; force 28MHz
     nextreg SPRITE_CONTROL_NR_15,0  ; SLU layers, everything default
     nextreg ULA_CONTROL_NR_68,$80 ,, DISPLAY_CONTROL_NR_69,0    ; ULA off, Layer2 off
     ; tilemode 80x32x1bpp, no-attribute, first palette, tilemap-over-ULA, 512tileId
@@ -116,6 +121,14 @@ test_start:
     call    div10.eDiv10C
     ; rigorous tests doing 0..255/0..255/0..127 for all three variants
     IFDEF _INCLUDE_DIV_10_TESTS_ : call div10.test : ENDIF
+
+    ; snippet for "HL mod 320"
+    ld      hl,1234         ; expected result for 1234: HL = 274 ($0112)
+    call    mod320.hlMod320
+    ld      hl,2345         ; expected result for 2345: HL = 105 ($0069)
+    call    mod320.hlMod320_unrolled
+    ; rigorous tests doing full HL=0..65535
+    IFDEF _INCLUDE_MOD_320_TESTS_ : call mod320.test : ENDIF
 
     ;; refresh screen and snippets texts and wait again for key
     jr      .refresh_screen
@@ -220,6 +233,16 @@ test_div10B:
 test_div10C:
     DB  .e-.s,  4, 13
 .s: test_txt_hexadr div10.eDiv10C, "c) E-Div-10: 7B (0..127)"
+.e:
+
+test_mod320:
+    DB  .e-.s, 40, 11
+.s: test_txt_hexadr mod320.hlMod320, "HL modulo 320"
+.e:
+
+test_mod320_unrolled:
+    DB  .e-.s, 40, 12
+.s: test_txt_hexadr mod320.hlMod320_unrolled, "HL modulo 320 unrolled"
 .e:
 
 ; test_texts list terminator
