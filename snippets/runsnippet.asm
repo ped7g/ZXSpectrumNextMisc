@@ -237,12 +237,17 @@ test_div10C:
 
 test_mod320:
     DB  .e-.s, 40, 11
-.s: test_txt_hexadr mod320.hlMod320, "HL modulo 320"
+.s: test_txt_hexadr mod320.hlMod320, "a) HL modulo 320"
 .e:
 
 test_mod320_unrolled:
     DB  .e-.s, 40, 12
-.s: test_txt_hexadr mod320.hlMod320_unrolled, "HL modulo 320 unrolled"
+.s: test_txt_hexadr mod320.hlMod320_unrolled, "b) HL modulo 320 unrolled"
+.e:
+
+test_mod320_lut:
+    DB  .e-.s, 40, 13
+.s: test_txt_hexadr mod320.deMod320_lut, "c) DE modulo 320 with LUT"
 .e:
 
 ; test_texts list terminator

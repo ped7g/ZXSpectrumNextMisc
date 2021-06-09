@@ -6,8 +6,15 @@ test:
 .loop:
     push    hl
     push    de
-    call    hlMod320
+
+    ;call    hlMod320
+
     ;call    hlMod320_unrolled
+
+    ex      de,hl       ; LUT variant takes input in DE and returns result in DE
+    call    deMod320_lut
+    ex      de,hl
+
     pop     de          ; compare result with preserved DE
     or      a
     sbc     hl,de
@@ -27,8 +34,6 @@ test:
     inc     hl
     ld      a,h
     or      l
-    rla                 ; create color bars just for fun + less boring test time
-    nextreg TILEMAP_DEFAULT_ATTR_NR_6C,a
     jr      nz,.loop    ; keep testing full 0..65535 range
     ret                 ; test finished
 
