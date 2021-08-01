@@ -10,6 +10,7 @@
     DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_DIV_10_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_320_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_192_TESTS_ ; addd rigorous tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -27,6 +28,8 @@
     IFDEF _INCLUDE_DIV_10_TESTS_ : INCLUDE "div10.test.i.asm" : ENDIF
     INCLUDE "mod320.i.asm"
     IFDEF _INCLUDE_MOD_320_TESTS_ : INCLUDE "mod320.test.i.asm" : ENDIF
+    INCLUDE "mod192.i.asm"
+    IFDEF _INCLUDE_MOD_192_TESTS_ : INCLUDE "mod192.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -127,11 +130,23 @@ test_start:
     call    mod320.hlMod320
     ld      hl,2345         ; expected result for 2345: HL = 105 ($0069)
     call    mod320.hlMod320_unrolled
+    ld      de,3456         ; expected result for 3456: DE = 256 ($0100)
+    call    mod320.deMod320_lut
     ; rigorous tests doing full HL=0..65535
     IFDEF _INCLUDE_MOD_320_TESTS_ : call mod320.test : ENDIF
 
+    ; snippet for "HL mod 192"
+    ld      hl,1234         ; expected result for 1234: HL = 82 ($0052)
+    call    mod192.hlMod192
+    ld      hl,2345         ; expected result for 2345: HL = 41 ($0029)
+    call    mod192.hlMod192_lut
+    ld      hl,3456         ; expected result for 3456: A = 0 ($00)
+    call    mod192.hlMod192_lut_B
+    ; rigorous tests doing full HL=0..65535
+    IFDEF _INCLUDE_MOD_192_TESTS_ : call mod192.test : ENDIF
+
     ;; refresh screen and snippets texts and wait again for key
-    jr      .refresh_screen
+    jp      .refresh_screen
 
 test_wait_for_key:
     ld      l,$1F           ; wait for press
@@ -248,6 +263,21 @@ test_mod320_unrolled:
 test_mod320_lut:
     DB  .e-.s, 40, 13
 .s: test_txt_hexadr mod320.deMod320_lut, "c) DE modulo 320 with LUT"
+.e:
+
+test_mod192:
+    DB  .e-.s, 40, 14
+.s: test_txt_hexadr mod192.hlMod192, "a) HL modulo 192"
+.e:
+
+test_mod192_lut:
+    DB  .e-.s, 40, 15
+.s: test_txt_hexadr mod192.hlMod192_lut, "b) HL modulo 192 with LUT"
+.e:
+
+test_mod192_lut_B:
+    DB  .e-.s, 40, 16
+.s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
 .e:
 
 ; test_texts list terminator
