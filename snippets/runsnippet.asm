@@ -1,7 +1,7 @@
 ; ZX Spectrum Next - assembly snippets, requires ZX Spectrum Next with core3.1.5+
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ;
-; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.17.0+)
+; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.18.2+)
 ; The Makefile has the full-rebuild instructions
 ;
 ; runsnippet.asm: including all snippets into one file, shows addresses for debugging
@@ -11,6 +11,7 @@
     DEFINE _INCLUDE_DIV_10_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_320_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_192_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_40_TESTS_ ; addd rigorous tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -30,6 +31,8 @@
     IFDEF _INCLUDE_MOD_320_TESTS_ : INCLUDE "mod320.test.i.asm" : ENDIF
     INCLUDE "mod192.i.asm"
     IFDEF _INCLUDE_MOD_192_TESTS_ : INCLUDE "mod192.test.i.asm" : ENDIF
+    INCLUDE "mod40.i.asm"
+    IFDEF _INCLUDE_MOD_40_TESTS_ : INCLUDE "mod40.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -144,6 +147,12 @@ test_start:
     call    mod192.hlMod192_lut_B
     ; rigorous tests doing full HL=0..65535
     IFDEF _INCLUDE_MOD_192_TESTS_ : call mod192.test : ENDIF
+
+    ; snippet for "HL mod 40"
+    ld      hl,1298         ; expected result for 1298: A = 18 ($0012)
+    call    mod40.hlMod40
+    ; rigorous tests doing full HL=0..65535
+    IFDEF _INCLUDE_MOD_40_TESTS_ : call mod40.test : ENDIF
 
     ;; refresh screen and snippets texts and wait again for key
     jp      .refresh_screen
@@ -278,6 +287,11 @@ test_mod192_lut:
 test_mod192_lut_B:
     DB  .e-.s, 40, 16
 .s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
+.e:
+
+test_mod40:
+    DB  .e-.s,  4, 14
+.s: test_txt_hexadr mod40.hlMod40, "HL modulo 40"
 .e:
 
 ; test_texts list terminator
