@@ -12,6 +12,7 @@
     DEFINE _INCLUDE_MOD_320_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_192_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_40_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_BIT_FUN_TESTS_ ; addd rigorous tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -33,6 +34,8 @@
     IFDEF _INCLUDE_MOD_192_TESTS_ : INCLUDE "mod192.test.i.asm" : ENDIF
     INCLUDE "mod40.i.asm"
     IFDEF _INCLUDE_MOD_40_TESTS_ : INCLUDE "mod40.test.i.asm" : ENDIF
+    INCLUDE "bit_fun.i.asm"
+    IFDEF _INCLUDE_BIT_FUN_TESTS_ : INCLUDE "bit_fun.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -153,6 +156,12 @@ test_start:
     call    mod40.hlMod40
     ; rigorous tests doing full HL=0..65535
     IFDEF _INCLUDE_MOD_40_TESTS_ : call mod40.test : ENDIF
+
+    ; snippet for "bit fun - rotate nibbles right"
+    ld      a,$3c
+    call    bit_fun.nibrrca_z80n
+    ; rigorous tests doing full A=0..255
+    IFDEF _INCLUDE_BIT_FUN_TESTS_ : call bit_fun.test : ENDIF
 
     ;; refresh screen and snippets texts and wait again for key
     jp      .refresh_screen
@@ -292,6 +301,11 @@ test_mod192_lut_B:
 test_mod40:
     DB  .e-.s,  4, 14
 .s: test_txt_hexadr mod40.hlMod40, "HL modulo 40"
+.e:
+
+test_nibrrca_z80n:
+    DB  .e-.s,  4, 15
+.s: test_txt_hexadr bit_fun.nibrrca_z80n, "RRCA-like but per nibbles"
 .e:
 
 ; test_texts list terminator
