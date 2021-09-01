@@ -10,6 +10,10 @@
 ; scrolling every text-row slightly up to produce effect of 8xN tile mode.
 ; The VRAM Bank 5 is used for virtual tile-map from $4000 up to font data.
 ;
+; TODO add per-window callback for custom copper code injection? (before v1.0?)
+; TODO add docs
+;
+; v0.9.1 - 2021-09-01           - added example
 ; v0.9 - 2021-08-30             - initial version, missing more docs and example code
 ;
 ; ## Dependencies:
