@@ -1,5 +1,6 @@
 ; ZX Spectrum Next - tilemodes 8xN, requires ZX Spectrum Next with core3.1.5+
 ; © Peter Helcmanovsky 2021, license: https://opensource.org/licenses/MIT
+; project repository: https://github.com/ped7g/ZXSpectrumNextMisc (report issues here)
 ;
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.18.2+)
 ; The Makefile has the full-rebuild instructions
@@ -11,8 +12,8 @@
 ; The VRAM Bank 5 is used for virtual tile-map from $4000 up to font data.
 ;
 ; TODO add per-window callback for custom copper code injection? (before v1.0?)
-; TODO add docs
 ;
+; v0.9.2 - 2021-09-02           - added README.md file and shortening example source a bit
 ; v0.9.1 - 2021-09-01           - added example
 ; v0.9 - 2021-08-30             - initial version, missing more docs and example code
 ;

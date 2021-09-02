@@ -2,7 +2,6 @@ SJASMPLUS := sjasmplus
 SJASMPLUSFLAGS := --msg=war --lstlab --nologo --fullpath
 INCLUDES := $(wildcard *.i.asm)
 EXAMPLE_INC := $(wildcard example/*.i.asm)
-DSPEDGE_RT_SRC := "../displayedge/displayedge_rt.i.asm"
 
 .PHONY: all clean gitrelease
 
