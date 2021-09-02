@@ -14,6 +14,8 @@ This library is meant mostly as help for TUI-like applications, wanting to use H
 
 It's also easy to split screen into independent vertical areas, displaying different parts of tile-map, or having bottom status line displaying content of first row from fixed address $4000, etc..
 
+Emulator warning: as of today, the library does display correctly only in #CSpectV2.14.8 (but horizontal scrolling is bugged) and in my "ZESERUse" fork of ZEsarUX. I'm not aware of other emulators capable to display this effect correctly.
+
 ## using library as source code included into your project
 
 Check the example/test8xN.asm for the code example.
