@@ -231,6 +231,7 @@ handleKeysOP:
         ld      (ix+displayMap.win_ofs_x.xOffset-displayMap),a   ; write value (either new or old) x-offset
         ret
 
+    ;-----------------------------------------------------------------------------------------------------------
     ; helper functions to draw content of example on screen
 
 highlightCurrentSelection:
@@ -273,12 +274,87 @@ highlightCurrentSelection:
         djnz    .loopEdgeSet
         ret
 
+PrintAt:
+    ; input:
+    ;   DE = text address
+    ;   following bytes after CALL instruction: column, row, color
+        ex      (sp),hl
+        ldi     bc,(hl)                 ; fake-ok ; ld c,(hl) : inc hl : ld b,(hl) : inc hl
+        ldi     a,(hl)                  ; fake-ok ; ld a,(hl) : inc hl
+        ex      (sp),hl
+        jp      tile8xN.Print
+
+drawFrame:
+    ; In:
+    ;   following bytes after CALL instruction: x 0..78, y 0..74, w 2..80, h 2..76, color 0..15 (sub-palette)
+    ; Uses:
+    ;   AF, HL, BC, DE
+        ex      (sp),hl                 ; read arguments from the machine code after the call instruction
+        ldi     bc,(hl)                 ; fake-ok ; ld c,(hl) : inc hl : ld b,(hl) : inc hl
+        ldi     de,(hl)                 ; fake-ok ; ld e,(hl) : inc hl : ld d,(hl) : inc hl
+        ldi     a,(hl)                  ; fake-ok ; ld a,(hl) : inc hl
+        ex      (sp),hl
+        ; start drawing
+        call    tile8xN.CalcTileAddress ; HL = left corner address
+        push    hl                      ; preserve left-top corner address
+        push    de                      ; preserve size of frame
+        swapnib
+        ld      c,a                     ; colour
+        ld      b,e
+        call    .h_frame                ; top frame
+        ld      b,d
+        call    .v_frame                ; left frame
+        push    hl
+        ld      a,e
+        dec     a
+        add     a,a
+        add     hl,a
+        ld      b,d
+        call    .v_frame                ; right frame
+        pop     hl                      ; HL = top left corner
+        ld      b,e
+        ld      e,160
+        dec     d
+        mul     de
+        add     hl,de                   ; HL = bottom left corner
+        call    .h_frame                ; bottom frame
+        ld      (hl),FNT_CHR_FRAME_BL
+        pop     de                      ; DE = H:W again
+        ld      a,e
+        dec     a
+        add     a,a
+        add     hl,a
+        ld      (hl),FNT_CHR_FRAME_BR
+        pop     hl                      ; HL = top left corner
+        ld      (hl),FNT_CHR_FRAME_TL
+        add     hl,a
+        ld      (hl),FNT_CHR_FRAME_TR
+        ret
+.h_frame:
+        push    hl,,de
+        ld      a,FNT_CHR_FRAME_H
+        ld      de,2-1
+        call    .draw_frame
+        pop     de,,hl
+        ret
+.v_frame:
+        push    hl,,de
+        ld      a,FNT_CHR_FRAME_V
+        ld      de,160-1
+        call    .draw_frame
+        pop     de,,hl
+        ret
+.draw_frame:
+        ld      (hl),a
+        inc     l
+        ld      (hl),c
+        add     hl,de
+        djnz    .draw_frame
+        ret
+
 drawStaticScreen:
-        ; draw light blue frame around whole virtual map
-        ld      bc,$0000
-        ld      de,80|(76<<8)           ; 80x76 frame at [0,0] (framing whole virtual map)
-        ld      a,4
-        call    drawFrame
+        ; draw light blue frame around whole virtual map ; 80x76 frame at [0,0]
+        call    drawFrame : db 0, 0, 80, 76, 4
         ; draw line numbers on each line at left and right side
         ld      bc,7
 .lNumLoop:
@@ -300,29 +376,14 @@ drawStaticScreen:
         cp      b
         jr      nz,.lNumLoop
         ; draw sub-frames and texts within them - "welcome" frame
-        ld      bc,$010B
-        ld      de,58|(8<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 11, 1, 58, 8, 6
         ld      de,.txt_welcome
-        ld      bc,$020D
-        ld      a,5
-        call    tile8xN.Print
-        ld      bc,$030D
-        ld      a,7
-        call    tile8xN.Print
-        ld      bc,$040D
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$050D
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$060D
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$070D
-        ld      a,4
-        call    tile8xN.Print
+        call    PrintAt : db $0D, $02, 5
+        call    PrintAt : db $0D, $03, 7
+        call    PrintAt : db $0D, $04, 4
+        call    PrintAt : db $0D, $05, 4
+        call    PrintAt : db $0D, $06, 4
+        call    PrintAt : db $0D, $07, 4
         ; highlight functional keys in "welcome" frame
         ld      bc,$050D
         call    tile8xN.CalcTileAddress
@@ -340,17 +401,10 @@ drawStaticScreen:
         call    highlightCurrentSelection
 
         ; draw sub-frames and texts within them - "space" frame
-        ld      bc,$0A0B
-        ld      de,58|(4<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 11, 10, 58, 4, 6
         ld      de,.txt_space
-        ld      bc,$0B0D
-        ld      a,5
-        call    tile8xN.Print
-        ld      bc,$0C0D
-        ld      a,4
-        call    tile8xN.Print
+        call    PrintAt : db $0D, $0B, 5
+        call    PrintAt : db $0D, $0C, 4
         ; highlight functional keys in "space" frame
         ld      bc,$0C0D
         call    tile8xN.CalcTileAddress
@@ -361,17 +415,10 @@ drawStaticScreen:
         ld      (hl),2<<4
 
         ; draw sub-frames and texts within them - "ofs_x" frame
-        ld      bc,$0F0B
-        ld      de,58|(4<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 11, 15, 58, 4, 6
         ld      de,.txt_ofs_x
-        ld      bc,$100D
-        ld      a,5
-        call    tile8xN.Print
-        ld      bc,$110D
-        ld      a,4
-        call    tile8xN.Print
+        call    PrintAt : db $0D, $10, 5
+        call    PrintAt : db $0D, $11, 4
         ; highlight functional keys in "ofs_x" frame
         ld      bc,$110D
         call    tile8xN.CalcTileAddress
@@ -383,58 +430,29 @@ drawStaticScreen:
 
         ; draw texts at "bottom" (no frame for these)
         ld      de,.txt_bottom
-        ld      bc,$490B
-        ld      a,5
-        call    tile8xN.Print
-        ld      bc,$4A0B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$4C00
-        ld      a,4
-        call    tile8xN.Print
+        call    PrintAt : db $0B, $49, 5
+        call    PrintAt : db $0B, $4A, 4
+        call    PrintAt : db $00, $4C, 4
 
         ; draw "copyright" texts
         ld      de,.txt_copyright
-        ld      bc,$140B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$150B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$160B
-        ld      a,2
-        call    tile8xN.Print
+        call    PrintAt : db $0B, $14, 4
+        call    PrintAt : db $0B, $15, 4
+        call    PrintAt : db $0B, $16, 2
 
         ; draw "info" texts
         ld      de,.txt_info
-        ld      bc,$180B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$190B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$1A0B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$1B0B
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$1D0B    ; +1 to make one blank line between
-        ld      a,0
-        call    tile8xN.Print
-        ld      bc,$1E0B
-        ld      a,0
-        call    tile8xN.Print
+        call    PrintAt : db $0B, $18, 4
+        call    PrintAt : db $0B, $19, 4
+        call    PrintAt : db $0B, $1A, 4
+        call    PrintAt : db $0B, $1B, 4
+        call    PrintAt : db $0B, $1D, 0    ; +1 Y to make one blank line between
+        call    PrintAt : db $0B, $1E, 0
 
         ; draw "font" frame
-        ld      bc,$200B
-        ld      de,34|(6<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 11, 32, 34, 6, 6
         ld      de,.txt_font
-        ld      bc,$200D
-        ld      a,5
-        call    tile8xN.Print
+        call    PrintAt : db $0D, $20, 5
         ld      bc,$210C
         call    tile8xN.CalcTileAddress
         xor     a
@@ -450,14 +468,9 @@ drawStaticScreen:
         jp      p,.fullFontLoop
 
         ; draw "palette" frame
-        ld      bc,$202F
-        ld      de,22|(18<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 47, 32, 22, 18, 6
         ld      de,.txt_palette
-        ld      bc,$2031
-        ld      a,5
-        call    tile8xN.Print
+        call    PrintAt : db $31, $20, 5
         ld      bc,$2130
         xor     a
 .fullPalLoop:
@@ -483,20 +496,11 @@ drawStaticScreen:
         jr      nz,.fillerLoop
 
         ; draw sub-frames and texts within them - "sjasmplus" frame
-        ld      bc,$270B
-        ld      de,34|(4<<8)
-        ld      a,6
-        call    drawFrame
+        call    drawFrame : db 11, 39, 34, 4, 6
         ld      de,.txt_sjasmplus
-        ld      bc,$280D
-        ld      a,4
-        call    tile8xN.Print
-        ld      bc,$290D
-        ld      a,2
-        call    tile8xN.Print
-        ld      bc,$2D0D
-        ld      a,4
-        call    tile8xN.Print
+        call    PrintAt : db $0D, $28, 4
+        call    PrintAt : db $0D, $29, 2
+        call    PrintAt : db $0D, $2D, 4
 
         ret
 
@@ -601,107 +605,10 @@ drawStaticScreen:
         DZ      "github.com/z00m128/sjasmplus"
         DZ      FNT_CHR_DOT_RED, FNT_CHR_DOT_YELLOW, FNT_CHR_DOT_GREEN, " greetings to demo scene ", FNT_CHR_DOT_GREEN, FNT_CHR_DOT_YELLOW, FNT_CHR_DOT_RED
 
-drawFrame:
-    ; In:
-    ;   [C,B] = [X,Y] (X 0..78, Y 0..74)
-    ;   [E,D] = [width, height] (width 2..80, height 2..76) (not sanitized)
-    ;   A = colour 0..15 (sub-palette)
-    ; Uses:
-    ;   AF, HL, BC, DE
-        call    tile8xN.CalcTileAddress ; HL = left corner address
-        push    hl                      ; preserve left-top corner address
-        push    de                      ; preserve size of frame
-        swapnib
-        ld      c,a                     ; colour
-        ld      b,e
-        call    .h_frame                ; top frame
-        ld      b,d
-        call    .v_frame                ; left frame
-        push    hl
-        ld      a,e
-        dec     a
-        add     a,a
-        add     hl,a
-        ld      b,d
-        call    .v_frame                ; right frame
-        pop     hl                      ; HL = top left corner
-        ld      b,e
-        ld      e,160
-        dec     d
-        mul     de
-        add     hl,de                   ; HL = bottom left corner
-        call    .h_frame                ; bottom frame
-        ld      (hl),FNT_CHR_FRAME_BL
-        pop     de                      ; DE = H:W again
-        ld      a,e
-        dec     a
-        add     a,a
-        add     hl,a
-        ld      (hl),FNT_CHR_FRAME_BR
-        pop     hl                      ; HL = top left corner
-        ld      (hl),FNT_CHR_FRAME_TL
-        add     hl,a
-        ld      (hl),FNT_CHR_FRAME_TR
-        ret
-.h_frame:
-        push    hl,,de
-        ld      a,FNT_CHR_FRAME_H
-        ld      de,2-1
-        call    .draw_frame
-        pop     de,,hl
-        ret
-.v_frame:
-        push    hl,,de
-        ld      a,FNT_CHR_FRAME_V
-        ld      de,160-1
-        call    .draw_frame
-        pop     de,,hl
-        ret
-.draw_frame:
-        ld      (hl),a
-        inc     l
-        ld      (hl),c
-        add     hl,de
-        djnz    .draw_frame
-        ret
-
     ; include font data
 font_src:
         INCLUDE "tilemap_font_8x6.i.asm"  ; 8x6 font made by Hadiak and Ped, copyleft (feel free to adjust/change)
-.SZ:    EQU     $-font_src
-
-FNT_CHR_BLOCK_EMPTY         EQU     0
-FNT_CHR_BLOCK_TR            EQU     1
-FNT_CHR_BLOCK_TL            EQU     2
-FNT_CHR_BLOCK_T             EQU     3
-FNT_CHR_BLOCK_BR            EQU     4
-FNT_CHR_BLOCK_R             EQU     5
-FNT_CHR_BLOCK_TL_BR         EQU     6
-FNT_CHR_BLOCK_INV_BL        EQU     7
-FNT_CHR_BLOCK_BL            EQU     8
-FNT_CHR_BLOCK_TR_BL         EQU     9
-FNT_CHR_BLOCK_L             EQU     10
-FNT_CHR_BLOCK_INV_BR        EQU     11
-FNT_CHR_BLOCK_B             EQU     12
-FNT_CHR_BLOCK_INV_TL        EQU     13
-FNT_CHR_BLOCK_INV_TR        EQU     14
-FNT_CHR_BLOCK_FULL          EQU     15
-FNT_CHR_FRAME_H             EQU     16
-FNT_CHR_FRAME_V             EQU     17
-FNT_CHR_FRAME_TL            EQU     18
-FNT_CHR_FRAME_TR            EQU     19
-FNT_CHR_FRAME_BL            EQU     20
-FNT_CHR_FRAME_BR            EQU     21
-FNT_CHR_CHECKER_8x8         EQU     22
-FNT_CHR_CHECKER_4x8         EQU     23
-FNT_CHR_DOT_RED             EQU     24
-FNT_CHR_DOT_YELLOW          EQU     25
-FNT_CHR_DOT_GREEN           EQU     26
-FNT_CHR_PIPE_RED            EQU     27
-FNT_CHR_PIPE_YELLOW         EQU     28
-FNT_CHR_PIPE_GREEN          EQU     29
-FNT_CHR_CNT_FROM_ABOVE      EQU     30
-FNT_CHR_DBL_CHEVRON         EQU     31
+font_src.SZ: EQU $-font_src
 
     ; stack space
         DS      256
