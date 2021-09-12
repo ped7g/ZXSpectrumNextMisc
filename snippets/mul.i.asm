@@ -55,4 +55,25 @@ mul_24_8_32_DELC:
     ret             ; result = DELC
     ; 4+8+4+4+4+4+4+8+8+4+4+8+8+10 = 82T
 
+;--------------------------------------------------------------------------------------------
+; (uint40)DEHLB = (uint32)EHLB * (uint8)C + (uint8)D
+; SIZE optimised, 17 bytes
+muladd_32_8_8_40_DEHLB:
+    ; do all four segments: EHLB * C = DEHLB with adding initial D as 8bit add-value
+    call    .do_two ; do two segments (LB * C)
+    ; do remaining two segments (EH * C)
+.do_two:
+    call    .do_one ; do two segments (call + fallthrough)
+.do_one:
+    ld      a,d     ; overflow from current result (or initial add-value)
+    ld      d,b     ; next 8bits of multiplier (at bottom of current EHLB)
+    ld      b,l     ; shift result EHL down to HLB (by 8)
+    ld      l,h
+    ld      h,e
+    ld      e,c     ; arg2
+    mul     de      ; DE = arg1_8bit_part * arg2
+    add     de,a    ; DE adjusted with overflow from previous sub-multiplication
+    ret
+    DISPLAY "muladd_32_8_8_40_DEHLB code size: ",/A,$-muladd_32_8_8_40_DEHLB
+
     ENDMODULE

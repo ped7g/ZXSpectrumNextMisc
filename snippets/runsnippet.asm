@@ -189,6 +189,18 @@ test_start:
     add     bc,-((.mul_A * .mul_B)&$FFFF)
     add     de,-(((.mul_A * .mul_B)>>16)&$FFFF)
 
+    ; snippet for "multiplication - 32x8 + 8 bits" ; DEHLB = D + C * EHLB
+    ld      d,$0A
+    ld      c,$AA
+    ld      e,$13
+    ld      hl,$579B
+    ld      b,$DF
+    call    mul.muladd_32_8_8_40_DEHLB      ; $0A + $AA * $13579BDF
+    ; expected DEHLB == $0CD82D8220, C preserved as $AA
+    add     de,-$0CD8
+    add     hl,-$2D82
+    add     bc,-$20AA                       ; DE,HL,BC should end zeroed here
+
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
@@ -345,6 +357,11 @@ test_mul16x8_24:
 test_mul24x8_32:
     DB  .e-.s,  4, 17
 .s: test_txt_hexadr mul.mul_24_8_32_DELC, "MUL 24x8 bits (32b result)"
+.e:
+
+test_mul32x8_40:
+    DB  .e-.s,  4, 18
+.s: test_txt_hexadr mul.muladd_32_8_8_40_DEHLB, "MULADD 32x8+8=40 bits (17B)"
 .e:
 
 ; test_texts list terminator
