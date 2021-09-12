@@ -21,7 +21,7 @@ nibrrca:            ; Z80-only variant
         xor     $88 ; if P/V=0, they differ, and indeed are swapped. Using xor $88 will correct both of them.
         ret         ; 9 bytes, 41/30T
 
-; original twitteer post making me curious about this topic
+; original twitter post making me curious about this topic
 ; https://twitter.com/nath_mojon/status/1429016130933379079
 ; posted by @nath_mojon, rotating right "nibbles"
 ; (code is modified to use D instead of B to have DJNZ available for test)

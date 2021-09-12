@@ -13,6 +13,7 @@
     DEFINE _INCLUDE_MOD_192_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_40_TESTS_ ; addd rigorous tests: error turns screen red
     DEFINE _INCLUDE_BIT_FUN_TESTS_ ; addd rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MUL_TESTS_ ; addd partial tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -36,6 +37,8 @@
     IFDEF _INCLUDE_MOD_40_TESTS_ : INCLUDE "mod40.test.i.asm" : ENDIF
     INCLUDE "bit_fun.i.asm"
     IFDEF _INCLUDE_BIT_FUN_TESTS_ : INCLUDE "bit_fun.test.i.asm" : ENDIF
+    INCLUDE "mul.i.asm"
+    IFDEF _INCLUDE_MUL_TESTS_ : INCLUDE "mul.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -162,6 +165,32 @@ test_start:
     call    bit_fun.nibrrca_z80n
     ; rigorous tests doing full A=0..255
     IFDEF _INCLUDE_BIT_FUN_TESTS_ : call bit_fun.test : ENDIF
+
+    ; example values for multiplication snippets
+.mul_A = $FF11FF
+.mul_B = $FF
+    ; snippet for "multiplication - 16x8 bits"
+    ld      e,high .mul_A
+    ld      l,low .mul_A
+    ld      a,low .mul_B
+    call    mul.mul_16_8_24_HLE             ; HLE = A * EL
+        ; subtract expected result from HLE to visually check correctness (HLDE should end zeroed)
+    ld      d,0
+    add     hl,-((((.mul_A&$FFFF) * .mul_B)>>8)&$FFFF)
+    add     de,-(low ((.mul_A&$FFFF) * .mul_B))
+
+    ; snippet for "multiplication - 24x8 bits"
+    ld      hl,$FFFF&(.mul_A>>8)
+    ld      e,low .mul_A
+    ld      a,low .mul_B
+    call    mul.mul_24_8_32_DELC            ; DELC = A * HLE
+    ld      b,l                             ; result = DEBC
+        ; subtract expected result from DEBC to visually check correctness (DEBC should end zeroed)
+    add     bc,-((.mul_A * .mul_B)&$FFFF)
+    add     de,-(((.mul_A * .mul_B)>>16)&$FFFF)
+
+    ; partial tests multiplying some hand-picked values
+    IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
     ;; refresh screen and snippets texts and wait again for key
     jp      .refresh_screen
@@ -306,6 +335,16 @@ test_mod40:
 test_nibrrca_z80n:
     DB  .e-.s,  4, 15
 .s: test_txt_hexadr bit_fun.nibrrca_z80n, "RRCA-like but per nibbles"
+.e:
+
+test_mul16x8_24:
+    DB  .e-.s,  4, 16
+.s: test_txt_hexadr mul.mul_16_8_24_HLE, "MUL 16x8 bits (24b result)"
+.e:
+
+test_mul24x8_32:
+    DB  .e-.s,  4, 17
+.s: test_txt_hexadr mul.mul_24_8_32_DELC, "MUL 24x8 bits (32b result)"
 .e:
 
 ; test_texts list terminator
