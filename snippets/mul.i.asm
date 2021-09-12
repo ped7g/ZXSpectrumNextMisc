@@ -89,7 +89,7 @@ muladd_32_8_8_40_DEHLB_perf:
     ld      b,e     ; B = result:0:7
     ld      e,c
     mul     de
-    add     de,a    ; DE = D * C + ... ; "..." is overflow from lower part of result
+    add     de,a    ; DE = B * C + ... ; "..." is overflow from lower part of result
     ld      a,d
     ld      d,l
     ld      l,e     ; L = result:8:15
