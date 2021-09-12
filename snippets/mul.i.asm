@@ -57,7 +57,7 @@ mul_24_8_32_DELC:
 
 ;--------------------------------------------------------------------------------------------
 ; (uint40)DEHLB = (uint32)EHLB * (uint8)C + (uint8)D
-; SIZE optimised, 17 bytes
+; SIZE optimised, 17 bytes, 4*(4+4+4+4+4+4+8+8+10)+3*17 = 251T
 muladd_32_8_8_40_DEHLB:
     ; do all four segments: EHLB * C = DEHLB with adding initial D as 8bit add-value
     call    .do_two ; do two segments (LB * C)
@@ -74,6 +74,35 @@ muladd_32_8_8_40_DEHLB:
     mul     de      ; DE = arg1_8bit_part * arg2
     add     de,a    ; DE adjusted with overflow from previous sub-multiplication
     ret
-    DISPLAY "muladd_32_8_8_40_DEHLB code size: ",/A,$-muladd_32_8_8_40_DEHLB
+;     DISPLAY "muladd_32_8_8_40_DEHLB code size: ",/A,$-muladd_32_8_8_40_DEHLB
+
+;--------------------------------------------------------------------------------------------
+; (uint40)DEHLB = (uint32)HLBE * (uint8)C + (uint8)A
+;                       ! ^ differs from size-optimised muladd_32_8_8_40_DEHLB !
+; performance optimised, 30 bytes, 4*13+8*8+10 = 126T
+muladd_32_8_8_40_DEHLB_perf:
+    ld      d,c
+    mul     de
+    add     de,a    ; DE = E * C + A
+    ld      a,d
+    ld      d,b
+    ld      b,e     ; B = result:0:7
+    ld      e,c
+    mul     de
+    add     de,a    ; DE = D * C + ... ; "..." is overflow from lower part of result
+    ld      a,d
+    ld      d,l
+    ld      l,e     ; L = result:8:15
+    ld      e,c
+    mul     de
+    add     de,a    ; DE = L * C + ...
+    ld      a,d
+    ld      d,h
+    ld      h,e     ; H = result:16:23
+    ld      e,c
+    mul     de
+    add     de,a    ; DE = H * C + ...
+    ret             ; result = DEHLB
+;     DISPLAY "muladd_32_8_8_40_DEHLB_perf code size: ",/A,$-muladd_32_8_8_40_DEHLB_perf
 
     ENDMODULE

@@ -201,6 +201,18 @@ test_start:
     add     hl,-$2D82
     add     bc,-$20AA                       ; DE,HL,BC should end zeroed here
 
+    ; snippet for "multiplication - 32x8 + 8 bits", performance variant ; DEHLB = A + C * HLBE
+    ld      a,$0A
+    ld      c,$AA
+    ld      hl,$1357
+    ld      b,$9B
+    ld      e,$DF
+    call    mul.muladd_32_8_8_40_DEHLB_perf ; $0A + $AA * $13579BDF
+    ; expected DEHLB == $0CD82D8220, C preserved as $AA
+    add     de,-$0CD8
+    add     hl,-$2D82
+    add     bc,-$20AA                       ; DE,HL,BC should end zeroed here
+
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
@@ -361,7 +373,12 @@ test_mul24x8_32:
 
 test_mul32x8_40:
     DB  .e-.s,  4, 18
-.s: test_txt_hexadr mul.muladd_32_8_8_40_DEHLB, "MULADD 32x8+8=40 bits (17B)"
+.s: test_txt_hexadr mul.muladd_32_8_8_40_DEHLB, "a) MULADD bits 32x8+8=40, 17B"
+.e:
+
+test_mul32x8_40_perf:
+    DB  .e-.s,  4, 19
+.s: test_txt_hexadr mul.muladd_32_8_8_40_DEHLB_perf, "b) MULADD 2x faster, 30B"
 .e:
 
 ; test_texts list terminator

@@ -36,16 +36,16 @@ test:
     call    mul_24_8_32_DELC    ; A * HLE = DELC
     ld      a,(ix+4)
     sub     c
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+5)
     sub     l
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+6)
     sub     e
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+7)
     sub     d
-    jr      nz,.error
+    jp      nz,.error
     ld      de,8
     add     ix,de
     djnz    .l1
@@ -82,6 +82,39 @@ test:
     add     ix,de
 .l2_b+1: ld b,0         ; loop counter (SMC code)
     djnz    .l2
+
+    ; mul 32x8 performance tests
+    ld      ix,.data_32x8
+    ld      b,.data_32x8.count
+.l3:
+    ld      a,b
+    ld      (.l3_b),a           ; preserve loop counter
+    ld      a,(ix+0)            ; +A
+    ld      c,(ix+1)            ; C (8b arg1)
+    ld      e,(ix+2)            ; HLBE (32b arg2)
+    ld      b,(ix+3)
+    ld      l,(ix+4)
+    ld      h,(ix+5)
+    call    muladd_32_8_8_40_DEHLB_perf ; A + C * HLBE = DEHLB
+    ld      a,(ix+6)
+    sub     b
+    jr      nz,.error
+    ld      a,(ix+7)
+    sub     l
+    jr      nz,.error
+    ld      a,(ix+8)
+    sub     h
+    jr      nz,.error
+    ld      a,(ix+9)
+    sub     e
+    jr      nz,.error
+    ld      a,(ix+10)
+    sub     d
+    jr      nz,.error
+    ld      de,11
+    add     ix,de
+.l3_b+1: ld b,0         ; loop counter (SMC code)
+    djnz    .l3
 
     ret                 ; test finished
 
