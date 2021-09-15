@@ -213,6 +213,15 @@ test_start:
     add     hl,-$2D82
     add     bc,-$20AA                       ; DE,HL,BC should end zeroed here
 
+    ; snippet for "multiplication - 16x16 = 16 bits" ; AE = HL * DC
+    ld      hl,$1357
+    ld      d,$FD
+    ld      c,$B9
+    call    mul.mul_16_16_16_AE ; $1357 * $FDB9
+    ; expected AE == $F4DF
+    ld      d,a
+    add     de,-$F4DF                       ; DE should end zeroed here
+
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
@@ -379,6 +388,11 @@ test_mul32x8_40:
 test_mul32x8_40_perf:
     DB  .e-.s,  4, 19
 .s: test_txt_hexadr mul.muladd_32_8_8_40_DEHLB_perf, "b) MULADD 2x faster, 30B"
+.e:
+
+test_mul16x16_16:
+    DB  .e-.s,  4, 20
+.s: test_txt_hexadr mul.mul_16_16_16_AE, "MUL 16x16 bits (16b result)"
 .e:
 
 ; test_texts list terminator

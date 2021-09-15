@@ -18,13 +18,14 @@
 
 ;--------------------------------------------------------------------------------------------
 ; (uint16)DE = (uint8)D * (uint8)E  ; what the HW instruction `mul` does, just a reminder
+; 3 bytes, 8+10 = 18T (MUL is two byte long, 8T, RET is 10T)
 mul_8_8_16:
     mul     de
     ret
-    ; 8+10 = 18T
 
 ;--------------------------------------------------------------------------------------------
 ; (uint24)HLE = (uint16)EL * (uint8)A
+; 11 bytes, 4+8+4+4+8+4+8+10 = 50T
 mul_16_8_24_HLE:
     ld      d,a
     mul     de      ; DE = E*A
@@ -34,10 +35,10 @@ mul_16_8_24_HLE:
     ld      a,d
     add     hl,a    ; HL = E*A + (L*A)>>8
     ret             ; HLE = EL*A
-    ; 4+8+4+4+8+4+8+10 = 50T
 
 ;--------------------------------------------------------------------------------------------
 ; (uint32)DELC = (uint24)HLE * (uint8)A
+; 19 bytes, 4+8+4+4+4+4+4+8+8+4+4+8+8+10 = 82T
 mul_24_8_32_DELC:
     ld      d,a
     mul     de      ; de = E*A
@@ -53,7 +54,6 @@ mul_24_8_32_DELC:
     mul     de
     add     de,a    ; de = H*A + (L*A + (E*A)>>8)>>8 ; can't overflow (summing final "HLE*A")
     ret             ; result = DELC
-    ; 4+8+4+4+4+4+4+8+8+4+4+8+8+10 = 82T
 
 ;--------------------------------------------------------------------------------------------
 ; (uint40)DEHLB = (uint32)EHLB * (uint8)C + (uint8)D
@@ -74,7 +74,6 @@ muladd_32_8_8_40_DEHLB:
     mul     de      ; DE = arg1_8bit_part * arg2
     add     de,a    ; DE adjusted with overflow from previous sub-multiplication
     ret
-;     DISPLAY "muladd_32_8_8_40_DEHLB code size: ",/A,$-muladd_32_8_8_40_DEHLB
 
 ;--------------------------------------------------------------------------------------------
 ; (uint40)DEHLB = (uint32)HLBE * (uint8)C + (uint8)A
@@ -103,6 +102,29 @@ muladd_32_8_8_40_DEHLB_perf:
     mul     de
     add     de,a    ; DE = H * C + ...
     ret             ; result = DEHLB
-;     DISPLAY "muladd_32_8_8_40_DEHLB_perf code size: ",/A,$-muladd_32_8_8_40_DEHLB_perf
+
+;--------------------------------------------------------------------------------------------
+; (uint16)AE = (uint16 HL)x * (uint16 DC)y
+; 15 bytes, 4+8+4+4+4+8+4+4+4+8+4+10 = 66T
+; also the truncated 16b result is identical to low 16 bits of signed 16x16 multiplication
+; so this is also "(uint16)AE = (int16 HL)x * (int16 DC)y" (or "int16" result if there's no overflow)
+mul_16_16_16_AE:
+    ; ld c,e        ; uncomment to accept "y" argument in DE
+    ; HxD xh*yh is not relevant for 16b result at all
+    ld      e,l
+    mul     de      ; LxD xl*yh
+    ld      a,e     ; part of r:8:15
+    ld      e,c
+    ld      d,h
+    mul     de      ; HxC xh*yl
+    add     a,e     ; second part of r:8:15
+    ld      e,c
+    ld      d,l
+    mul     de      ; LxC xl*yl (E = r:0:7)
+    add     a,d     ; third/last part of r:8:15
+    ; uncomment to put result into HL
+    ; ld h,a : ld l,e
+    ret             ; result = AE
+;     DISPLAY "mul_16_16_16_AE code size: ",/A,$-mul_16_16_16_AE
 
     ENDMODULE

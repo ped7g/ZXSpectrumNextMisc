@@ -20,7 +20,7 @@ test:
     ld      a,(ix+5)
     sub     h
     jp      nz,.error
-    ld      de,6
+    ld      de,.data_16x8.itemSize
     add     ix,de
     jr      .l0
 .done_16x8:
@@ -46,7 +46,7 @@ test:
     ld      a,(ix+7)
     sub     d
     jp      nz,.error
-    ld      de,8
+    ld      de,.data_24x8.itemSize
     add     ix,de
     djnz    .l1
 
@@ -65,20 +65,20 @@ test:
     call    muladd_32_8_8_40_DEHLB  ; D + C * EHLB = DEHLB
     ld      a,(ix+6)
     sub     b
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+7)
     sub     l
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+8)
     sub     h
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+9)
     sub     e
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+10)
     sub     d
-    jr      nz,.error
-    ld      de,11
+    jp      nz,.error
+    ld      de,.data_32x8.itemSize
     add     ix,de
 .l2_b+1: ld b,0         ; loop counter (SMC code)
     djnz    .l2
@@ -111,10 +111,28 @@ test:
     ld      a,(ix+10)
     sub     d
     jr      nz,.error
-    ld      de,11
+    ld      de,.data_32x8.itemSize
     add     ix,de
 .l3_b+1: ld b,0         ; loop counter (SMC code)
     djnz    .l3
+
+    ; mul 16x16_16 tests
+    ld      ix,.data_16x16
+    ld      b,.data_16x16.count
+.l4:
+    ld      l,(ix+0)            ; HL (16b arg1)
+    ld      h,(ix+1)
+    ld      c,(ix+2)            ; DC (16b arg2)
+    ld      d,(ix+3)
+    call    mul_16_16_16_AE ; HL * DC = AE
+    sub     (ix+5)
+    jr      nz,.error
+    ld      a,(ix+4)
+    sub     e
+    jr      nz,.error
+    ld      de,.data_16x16.itemSize
+    add     ix,de
+    djnz    .l4
 
     ret                 ; test finished
 
@@ -126,6 +144,7 @@ test:
 .data_16x8:
     ; A * EL = HLE
     db $00 : dw $0000 : d24 $000000
+.data_16x8.itemSize: equ $-.data_16x8
     db $01 : dw $0000 : d24 $000000
     db $83 : dw $0000 : d24 $000000
     db $FF : dw $0000 : d24 $000000
@@ -156,6 +175,7 @@ test:
 .data_24x8:
     ; A * HLE = DELC
     db $00 : d24 $000000 : dd $00000000
+.data_24x8.itemSize: equ $-.data_24x8
     db $01 : d24 $000000 : dd $00000000
     db $83 : d24 $000000 : dd $00000000
     db $FF : d24 $000000 : dd $00000000
@@ -184,11 +204,12 @@ test:
     db $83 : d24 $FF11FF : dd $8286357D
     db $FF : d24 $FF11FF : dd $FE12ED01
     db $FF : d24 $FFFFFF : dd $FEFFFF01
-.data_24x8.count:  equ  ($-.data_24x8)/8
+.data_24x8.count:  equ  ($-.data_24x8)/.data_24x8.itemSize
 
 .data_32x8:
     ;    D +  C *       EHLB =    EHLB of result   D of result
     db $00, $00 : dd $00000000 : dd $00000000 : db $00
+.data_32x8.itemSize: equ $-.data_32x8
     db $0A, $00 : dd $00000000 : dd $0000000A : db $00
     db $A0, $00 : dd $00000000 : dd $000000A0 : db $00
     db $00, $01 : dd $00000000 : dd $00000000 : db $00
@@ -234,6 +255,45 @@ test:
     db $0A, $FF : dd $FFFFFFFF : dd $FFFFFF0B : db $FE
     db $A0, $FF : dd $FFFFFFFF : dd $FFFFFFA1 : db $FE
     db $FF, $FF : dd $FFFFFFFF : dd $00000000 : db $FF
-.data_32x8.count:  equ  ($-.data_32x8)/8
+.data_32x8.count:   equ  ($-.data_32x8)/.data_32x8.itemSize
 
+.data_16x16:    ; (used by routines with different result size from 16 to 32)
+    dw $0000, $0000 : dd {$-4}*{$-2}
+.data_16x16.itemSize: equ $-.data_16x16
+    dw $0001, $0000 : dd {$-4}*{$-2}
+    dw $0307, $0000 : dd {$-4}*{$-2}
+    dw $5678, $0000 : dd {$-4}*{$-2}
+    dw $ABCD, $0000 : dd {$-4}*{$-2}
+    dw $FFFF, $0000 : dd {$-4}*{$-2}
+    dw $0000, $0001 : dd {$-4}*{$-2}
+    dw $0001, $0001 : dd {$-4}*{$-2}
+    dw $0307, $0001 : dd {$-4}*{$-2}
+    dw $5678, $0001 : dd {$-4}*{$-2}
+    dw $ABCD, $0001 : dd {$-4}*{$-2}
+    dw $FFFF, $0001 : dd {$-4}*{$-2}
+    dw $0000, $0205 : dd {$-4}*{$-2}
+    dw $0001, $0205 : dd {$-4}*{$-2}
+    dw $0307, $0205 : dd {$-4}*{$-2}
+    dw $5678, $0205 : dd {$-4}*{$-2}
+    dw $ABCD, $0205 : dd {$-4}*{$-2}
+    dw $FFFF, $0205 : dd {$-4}*{$-2}
+    dw $0000, $5432 : dd {$-4}*{$-2}
+    dw $0001, $5432 : dd {$-4}*{$-2}
+    dw $0307, $5432 : dd {$-4}*{$-2}
+    dw $5678, $5432 : dd {$-4}*{$-2}
+    dw $ABCD, $5432 : dd {$-4}*{$-2}
+    dw $FFFF, $5432 : dd {$-4}*{$-2}
+    dw $0000, $A987 : dd {$-4}*{$-2}
+    dw $0001, $A987 : dd {$-4}*{$-2}
+    dw $0307, $A987 : dd {$-4}*{$-2}
+    dw $5678, $A987 : dd {$-4}*{$-2}
+    dw $ABCD, $A987 : dd {$-4}*{$-2}
+    dw $FFFF, $A987 : dd {$-4}*{$-2}
+    dw $0000, $FFFF : dd {$-4}*{$-2}
+    dw $0001, $FFFF : dd {$-4}*{$-2}
+    dw $0307, $FFFF : dd {$-4}*{$-2}
+    dw $5678, $FFFF : dd {$-4}*{$-2}
+    dw $ABCD, $FFFF : dd {$-4}*{$-2}
+    dw $FFFF, $FFFF : dd {$-4}*{$-2}
+.data_16x16.count:  equ  ($-.data_16x16)/.data_16x16.itemSize
     ENDMODULE
