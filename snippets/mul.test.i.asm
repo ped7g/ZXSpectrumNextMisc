@@ -98,19 +98,19 @@ test:
     call    muladd_32_8_8_40_DEHLB_perf ; A + C * HLBE = DEHLB
     ld      a,(ix+6)
     sub     b
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+7)
     sub     l
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+8)
     sub     h
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+9)
     sub     e
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+10)
     sub     d
-    jr      nz,.error
+    jp      nz,.error
     ld      de,.data_32x8.itemSize
     add     ix,de
 .l3_b+1: ld b,0         ; loop counter (SMC code)
@@ -133,6 +133,33 @@ test:
     ld      de,.data_16x16.itemSize
     add     ix,de
     djnz    .l4
+
+    ; mul 16x16_32 tests
+    ld      ix,.data_16x16
+    ld      b,.data_16x16.count
+.l5:
+    push    bc
+    ld      c,(ix+0)            ; BC (16b arg1)
+    ld      b,(ix+1)
+    ld      l,(ix+2)            ; HL (16b arg2)
+    ld      h,(ix+3)
+    call    mul_16_16_32_DELC   ; HL * BC = DELA
+    ld      a,c
+    pop     bc
+    sub     (ix+4)
+    jr      nz,.error
+    ld      a,(ix+5)
+    sub     l
+    jr      nz,.error
+    ld      a,(ix+6)
+    sub     e
+    jr      nz,.error
+    ld      a,(ix+7)
+    sub     d
+    jr      nz,.error
+    ld      de,.data_16x16.itemSize
+    add     ix,de
+    djnz    .l5
 
     ret                 ; test finished
 

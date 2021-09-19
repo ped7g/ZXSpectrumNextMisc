@@ -125,6 +125,38 @@ mul_16_16_16_AE:
     ; uncomment to put result into HL
     ; ld h,a : ld l,e
     ret             ; result = AE
-;     DISPLAY "mul_16_16_16_AE code size: ",/A,$-mul_16_16_16_AE
+
+;--------------------------------------------------------------------------------------------
+; (uint32)DELC = (uint16 HL)x * (uint16 BC)y
+; 29 bytes, 4+4+8+4+4+4+4+8+8+4+4+4+8+11+4+4+8+(12+0|7+4)+4+8+10 = 129/128T (uses af, bc, de, hl)
+mul_16_16_32_DELC:
+    ld      d,l
+    ld      e,c
+    mul     de      ; xl*yl
+    ld      a,d     ; A = hi(xl*yl)
+    ld      d,c
+    ld      c,e     ; C = lo(xl*yl)
+    ld      e,h
+    mul     de      ; yl*xh
+    add     de,a    ; DE = xh*yl + hi(xl*yl) (can't overflow)
+    ex      de,hl   ; HL = xh*yl + hi(xl*yl), DE = x, B = yh, C = lo(xl*yl)
+    ld      a,d     ; A = xh
+    ld      d,b
+    mul     de      ; yh*xl
+    add     hl,de   ; HL = yh*xl + xh*yl + hi(xl*yl), CF=overflow
+    ld      d,b
+    ld      e,a
+    mul     de      ; yh*xh
+    jr      nc,.no_cf_to_top    ; resolve carry before `add de,a` which destroys it (core 3.1.5)
+    inc     d
+.no_cf_to_top:
+    ld      a,h
+    add     de,a    ; can't overflow
+    ret             ; result = DELC
+    DISPLAY "mul_16_16_32_DELC code size: ",/A,$-mul_16_16_32_DELC
+
+;TODO:
+; considering signed mul, is int8 x int8 faster done by handling sign and doing 1x `mul` with abs values
+; or sign-extending to int16 x int16 and use 16x16=16 routine?
 
     ENDMODULE

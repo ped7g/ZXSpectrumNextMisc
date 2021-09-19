@@ -222,6 +222,15 @@ test_start:
     ld      d,a
     add     de,-$F4DF                       ; DE should end zeroed here
 
+    ; snippet for "multiplication - 16x16 = 32 bits" ; DELC = HL * BC
+    ld      hl,$1357
+    ld      bc,$FDB9
+    call    mul.mul_16_16_32_DELC   ; $1357 * $FDB9
+    ; expected DELC == $132AF4DF
+    ld      b,l                     ; move result to DEBC
+    add     de,-$132A
+    add     bc,-$F4DF               ; DEBC should end zeroed here
+
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
@@ -393,6 +402,11 @@ test_mul32x8_40_perf:
 test_mul16x16_16:
     DB  .e-.s,  4, 20
 .s: test_txt_hexadr mul.mul_16_16_16_AE, "MUL 16x16 bits (16b result)"
+.e:
+
+test_mul16x16_32:
+    DB  .e-.s,  4, 21
+.s: test_txt_hexadr mul.mul_16_16_32_DELC, "MUL 16x16 bits (32b result)"
 .e:
 
 ; test_texts list terminator
