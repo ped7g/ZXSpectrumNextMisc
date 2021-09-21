@@ -161,6 +161,35 @@ test:
     add     ix,de
     djnz    .l5
 
+    ; signed mul 8x8_16 tests (testing it against 16x16_16 results), doing all possible 64ki inputs
+    ld      de,0
+.l6:
+    push    de
+    push    de
+    call    mul.muls_8_8_16_AE
+    ld      d,a
+    ex      de,hl
+    ex      (sp),hl     ; HL = original input, (SP) expected result
+    ld      c,l
+    rl      l
+    sbc     a,a
+    ld      d,a         ; DC = y
+    ld      l,h
+    rl      h
+    sbc     a,a
+    ld      h,a         ; HL = x
+    call    mul.mul_16_16_16_AE
+    ld      d,a
+    pop     hl
+    or      a
+    sbc     hl,de
+    pop     de
+    jr      nz,.error
+    inc     e
+    jr      nz,.l6
+    inc     d
+    jr      nz,.l6
+
     ret                 ; test finished
 
 .error:

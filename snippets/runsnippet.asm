@@ -231,6 +231,13 @@ test_start:
     add     de,-$132A
     add     bc,-$F4DF               ; DEBC should end zeroed here
 
+    ; snippet for "multiplication - signed 8x8 = 16 bits" ; AE = E * D
+    ld      de,$AABA
+    call    mul.muls_8_8_16_AE      ; -86 * -70 ($AA * $BA)
+    ; expected AE == $1784 (+6020)
+    ld      d,a                     ; move result to DE
+    add     de,-$1784               ; DE should end zeroed here
+
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
@@ -407,6 +414,11 @@ test_mul16x16_16:
 test_mul16x16_32:
     DB  .e-.s,  4, 21
 .s: test_txt_hexadr mul.mul_16_16_32_DELC, "MUL 16x16 bits (32b result)"
+.e:
+
+test_muls8x8_16:
+    DB  .e-.s, 40, 17
+.s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
 .e:
 
 ; test_texts list terminator

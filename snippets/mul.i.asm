@@ -155,8 +155,40 @@ mul_16_16_32_DELC:
     ret             ; result = DELC
     DISPLAY "mul_16_16_32_DELC code size: ",/A,$-mul_16_16_32_DELC
 
-;TODO:
-; considering signed mul, is int8 x int8 faster done by handling sign and doing 1x `mul` with abs values
-; or sign-extending to int16 x int16 and use 16x16=16 routine?
+;--------------------------------------------------------------------------------------------
+;--------------------------------------------------------------------------------------------
+;--------------------------------------------------------------------------------------------
+; signed variants and tips&tricks how to exploit unsigned multiplications for signed values
+
+; general rule 1: for N-bit x N-bit unsigned multiplication, the bottom N-bits of unsigned
+; result are identical to bottom N-bits for the same bit patterns interpreted as signed
+; values/mul. ie. `mul_16_16_16` works both as signed and unsigned multiplication, as long
+; as you don't care about overflow and truncation.
+; Same way the `mul de` itself works as 8x8=8 signed multiplication.
+
+; general rule 2: if N-bit x N-bit signed values are miscalculated as unsigned multiplication,
+; the negative values are interpreted as value+(1<<N), for example in case of 8bit value it
+; is value+$100. This makes the unsigned result to contain in upper bits extra +y, +x or +y+x
+; for negative value in x, y or both. Subtracting these from the unsigned result will "fix"
+; the result for signed multiplication. See muls_8_8_16 for practical example or grok this:
+; (x+$100)*y = x*y+$100*y ; for x negative, the unsigned mul result contains extra "+$100*y"
+
+;--------------------------------------------------------------------------------------------
+; (int16)AE = (int8)D * (int8)E
+; 15 bytes, 4+8+12+8+12+8+4+10 = 66T (best case 64T)
+muls_8_8_16_AE:
+    xor     a       ; value to adjust upper byte of result with (starts as zero)
+    bit     7,d     ; check sign of D
+    jr      z,.d_pos
+    sub     e       ; the upper byte will have extra +E
+.d_pos:
+    bit     7,e     ; check sign of E
+    jr      z,.e_pos
+    sub     d       ; the upper byte will have extra +D
+.e_pos:
+    mul     de      ; DE = D*E (unsigned way)
+    add     a,d     ; AE = D*E signed result
+    ret
+    DISPLAY "muls_8_8_16_AE code size: ",/A,$-muls_8_8_16_AE
 
     ENDMODULE
