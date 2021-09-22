@@ -126,10 +126,10 @@ test:
     ld      d,(ix+3)
     call    mul_16_16_16_AE ; HL * DC = AE
     sub     (ix+5)
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+4)
     sub     e
-    jr      nz,.error
+    jp      nz,.error
     ld      de,.data_16x16.itemSize
     add     ix,de
     djnz    .l4
@@ -166,7 +166,7 @@ test:
 .l6:
     push    de
     push    de
-    call    mul.muls_8_8_16_AE
+    call    muls_8_8_16_AE
     ld      d,a
     ex      de,hl
     ex      (sp),hl     ; HL = original input, (SP) expected result
@@ -178,7 +178,7 @@ test:
     rl      h
     sbc     a,a
     ld      h,a         ; HL = x
-    call    mul.mul_16_16_16_AE
+    call    mul_16_16_16_AE
     ld      d,a
     pop     hl
     or      a
@@ -189,6 +189,43 @@ test:
     jr      nz,.l6
     inc     d
     jr      nz,.l6
+
+    ; signed mul 16x8_16 tests (testing it against 16x16_16 results), doing some possible inputs (about ~10k of them)
+    ld      l,0
+    ld      d,l
+    ld      e,l         ; DE = 0, L = 0
+.l7:
+    push    hl
+    push    de
+    push    hl
+    push    de
+    call    muls_16_8_16_AL
+    ld      h,a         ; HL = r1
+    pop     de
+    ex      (sp),hl     ; (SP) = r1, de,hl original
+    ld      a,l
+    rla
+    sbc     a,a
+    ld      h,a         ; HL = y
+    ld      c,e         ; DC = x
+    call    mul_16_16_16_AE
+    ld      d,a
+    pop     hl
+    or      a
+    sbc     hl,de
+    pop     de
+    pop     hl
+    jr      nz,.error
+    ld      a,37
+    add     a,l
+    ld      l,a
+    jr      nc,.l7      ; y += 37
+    ld      a,47
+    add     a,e
+    ld      e,a
+    jr      nc,.l7      ; x += 47
+    inc     d
+    jr      nz,.l7
 
     ret                 ; test finished
 

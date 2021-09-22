@@ -189,6 +189,29 @@ muls_8_8_16_AE:
     mul     de      ; DE = D*E (unsigned way)
     add     a,d     ; AE = D*E signed result
     ret
-    DISPLAY "muls_8_8_16_AE code size: ",/A,$-muls_8_8_16_AE
+
+;--------------------------------------------------------------------------------------------
+; (int16)AL = (int16)DE * (int8)L
+; 16 bytes, 4+8+12+0+4+4+8+4+4+8+4+10 = 70T (best case 69T)
+; x * y = r16 ; results from unsigned 16x8 multiply for signed arguments are skewed like this:
+; + * + = x*y
+; - * + = (x+$10000)*y          = x*y + $10000*y
+; + * - = x*(y+$100)            = x*y + $100*x
+; - * - = (x+$10000)*(y+$100)   = x*y + $10000*y + $100*x + $1000000
+; The $10000*y and +$1000000 are truncated from 16b result, so only $100*x (when y<0) is relevant
+muls_16_8_16_AL:
+    xor     a
+    bit     7,l
+    jr      z,.y_pos
+    sub     e       ; the upper byte will have extra +low(x)
+.y_pos:
+    ld      h,d     ; HL = x1,y0
+    ld      d,l
+    mul     de      ; x0*y0
+    add     a,d     ; 8..15 bits of partial result adjusted
+    ex      de,hl   ; L = bottom 8 bits of result, DE = x1,y0
+    mul     de      ; x1*y0
+    add     a,e     ; final upper byte of result -> AL = result
+    ret
 
     ENDMODULE
