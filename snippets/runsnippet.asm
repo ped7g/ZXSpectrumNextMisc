@@ -241,11 +241,20 @@ test_start:
     ; snippet for "multiplication - signed 16x8 = 16 bits" ; AL = DE * L
 .muls_x: equ $5F7D
 .muls_y: equ -$64
+.muls_r: equ .muls_x*.muls_y
     ld      de,.muls_x
     ld      l,.muls_y
     call    mul.muls_16_8_16_AL
     ld      h,a                     ; move result to HL
-    add     hl,-(.muls_x*.muls_y&$FFFF)     ; if result is as expected, HL should end zeroed here
+    add     hl,-(.muls_r&$FFFF)     ; if result is as expected, HL should end zeroed here
+
+    ; snippet for "multiplication - signed 16x8 = 24 bits" ; HLE = DE * A
+    ld      de,.muls_x
+    ld      a,.muls_y
+    call    mul.muls_16_8_24_HLE
+    add     hl,-(.muls_r>>8)
+    ld      a,e
+    sub     low(.muls_r)            ; if result is as expected, HLA should end zeroed here
 
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
@@ -433,6 +442,16 @@ test_muls8x8_16:
 test_muls16x8_16:
     DB  .e-.s, 40, 18
 .s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
+.e:
+
+test_muls16x8_24:
+    DB  .e-.s, 40, 19
+.s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
+.e:
+
+test_muls16x8_24_compact:
+    DB  .e-.s, 40, 20
+.s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
 .e:
 
 ; test_texts list terminator

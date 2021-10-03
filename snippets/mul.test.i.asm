@@ -147,16 +147,16 @@ test:
     ld      a,c
     pop     bc
     sub     (ix+4)
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+5)
     sub     l
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+6)
     sub     e
-    jr      nz,.error
+    jp      nz,.error
     ld      a,(ix+7)
     sub     d
-    jr      nz,.error
+    jp      nz,.error
     ld      de,.data_16x16.itemSize
     add     ix,de
     djnz    .l5
@@ -226,6 +226,29 @@ test:
     jr      nc,.l7      ; x += 47
     inc     d
     jr      nz,.l7
+
+    ; signed mul 16x8_24 tests
+    ld      ix,.data_16x8_s
+    ld      b,.data_16x8_s.count
+.l8:
+    push    bc
+    ld      e,(ix+0)            ; DE (16b arg1)
+    ld      d,(ix+1)
+    ld      a,(ix+2)            ; A (8b arg2)
+    call    muls_16_8_24_HLE    ; DE * A = HLE (signed)
+    pop     bc
+    ld      a,(ix+3)
+    sub     e
+    jr      nz,.error
+    ld      a,(ix+4)
+    sub     l
+    jr      nz,.error
+    ld      a,(ix+5)
+    sub     h
+    jr      nz,.error
+    ld      de,.data_16x8_s.itemSize
+    add     ix,de
+    djnz    .l8
 
     ret                 ; test finished
 
@@ -389,4 +412,43 @@ test:
     dw $ABCD, $FFFF : dd {$-4}*{$-2}
     dw $FFFF, $FFFF : dd {$-4}*{$-2}
 .data_16x16.count:  equ  ($-.data_16x16)/.data_16x16.itemSize
+
+    DEFINE MASK_db  $FF
+    DEFINE MASK_dw  $FFFF
+    DEFINE MASK_d24 $FFFFFF
+    DEFINE MASK_dd  $FFFFFFFF
+
+    MACRO create_signed_data defx?, defy?, defr?, x?, y?
+        defx? x? : defy? y? : defr? ((x?)*(y?))&MASK_defr?
+    ENDM
+
+    MACRO create_cross_signed_data defx?, defy?, defr?, x?, y?
+        create_signed_data defx?, defy?, defr?, +(x?), +(y?)
+        create_signed_data defx?, defy?, defr?, +(x?), -(y?)
+        create_signed_data defx?, defy?, defr?, -(x?), +(y?)
+        create_signed_data defx?, defy?, defr?, -(x?), -(y?)
+    ENDM
+
+.data_16x8_s:
+    create_signed_data dw, db, d24, 0, 0
+.data_16x8_s.itemSize: equ $-.data_16x8_s
+    create_cross_signed_data dw, db, d24, 1, 1
+    create_cross_signed_data dw, db, d24, 47, 37
+    create_cross_signed_data dw, db, d24, $0055, $2A
+    create_cross_signed_data dw, db, d24, $0055, $55
+    create_cross_signed_data dw, db, d24, $0055, $7F
+    create_cross_signed_data dw, db, d24, $00AA, $2A
+    create_cross_signed_data dw, db, d24, $00AA, $55
+    create_cross_signed_data dw, db, d24, $00AA, $7F
+    create_cross_signed_data dw, db, d24, $2ABC, $2A
+    create_cross_signed_data dw, db, d24, $2ABC, $55
+    create_cross_signed_data dw, db, d24, $2ABC, $7F
+    create_cross_signed_data dw, db, d24, $5678, $2A
+    create_cross_signed_data dw, db, d24, $5678, $55
+    create_cross_signed_data dw, db, d24, $5678, $7F
+    create_cross_signed_data dw, db, d24, $7FEF, $2A
+    create_cross_signed_data dw, db, d24, $7FEF, $55
+    create_cross_signed_data dw, db, d24, $7FEF, $7F
+.data_16x8_s.count:  equ  ($-.data_16x8_s)/.data_16x8_s.itemSize : ASSERT .data_16x8_s.count < 256
+
     ENDMODULE

@@ -25,12 +25,12 @@ mul_8_8_16:
 
 ;--------------------------------------------------------------------------------------------
 ; (uint24)HLE = (uint16)EL * (uint8)A
-; 11 bytes, 4+8+4+4+8+4+8+10 = 50T
+; 11 bytes, 4+4+8+4+8+4+8+10 = 50T
 mul_16_8_24_HLE:
     ld      d,a
+    ld      h,a
     mul     de      ; DE = E*A
     ex      de,hl   ; HL = E*A, E=L
-    ld      d,a
     mul     de      ; DE = L*A
     ld      a,d
     add     hl,a    ; HL = E*A + (L*A)>>8
@@ -153,7 +153,6 @@ mul_16_16_32_DELC:
     ld      a,h
     add     de,a    ; can't overflow
     ret             ; result = DELC
-    DISPLAY "mul_16_16_32_DELC code size: ",/A,$-mul_16_16_32_DELC
 
 ;--------------------------------------------------------------------------------------------
 ;--------------------------------------------------------------------------------------------
@@ -212,6 +211,90 @@ muls_16_8_16_AL:
     ex      de,hl   ; L = bottom 8 bits of result, DE = x1,y0
     mul     de      ; x1*y0
     add     a,e     ; final upper byte of result -> AL = result
+    ret
+
+;--------------------------------------------------------------------------------------------
+; (int24)HLE = (int16)DE * (int8)A
+; 52 bytes, performance depends on arguments sign:
+;   ++ 4+4+4+4+10 +8+12 +8+4+8+4+8+10 = 88T
+;   -+ 4+4+4+4+10 +8+7 +8+4+4+4+4+8+4+8+10 = 95T
+;   +- 4+4+4+4+10 +4+4+8+12 +8+4+8+4+8+4+15+10 = 115T
+;   -- 4+4+4+4+10 +4+4+8+7+4+4 +8+4+8+4+8+4+15+10 = 118T
+; x * y = r24 ; results from unsigned 16x8 multiply for signed arguments are skewed like this:
+; + * + = x*y
+; - * + = (x+$10000)*y          = x*y + $10000*y
+; + * - = x*(y+$100)            = x*y + $100*x
+; - * - = (x+$10000)*(y+$100)   = x*y + $10000*y + $100*x + $1000000
+; The +$1000000 is truncated, only $100*x (when y<0) and $10000*y (when x<0) is relevant
+muls_16_8_24_HLE:
+    ld      h,a
+    ld      l,e
+    ld      e,a
+    or      a
+    jp      p,.y_pos
+    ld      c,l
+    ld      b,d     ; BC = x
+    bit     7,d
+    jr      z,.x_pos_y_neg
+    add     a,b
+    ld      b,a     ; BC = x + y<<8
+.x_pos_y_neg:
+    mul     de      ; x1*y0
+    ex      de,hl   ; HL = x1*y0, DE = y0,x0
+    mul     de      ; y0*x0
+    ld      a,d
+    add     hl,a    ; HLE = unsigned result
+    or      a
+    sbc     hl,bc   ; HLE = signed result (adjusted)
+    ret
+.y_pos:
+    bit     7,d
+    jr      z,.x_pos_y_pos
+    mul     de      ; x1*y0
+    ld      a,d
+    sub     h       ; adjust x1*y0 by -y<<8
+    ld      d,a
+    ex      de,hl   ; HL = adjusted x1*y0, DE = y0,x0
+    mul     de      ; y0*x0
+    ld      a,d
+    add     hl,a    ; HLE = signed result (adjusted)
+    ret
+.x_pos_y_pos:
+    ; identical code with tail of mul_16_8_24_HLE, can be reused if you want both
+    mul     de      ; x1*y0
+    ex      de,hl   ; HL = x1*y0, DE = y0,x0
+    mul     de      ; y0*x0
+    ld      a,d
+    add     hl,a    ; HLE = unsigned/signed result (no adjustment needed)
+    ret
+
+    DISPLAY "muls_16_8_24_HLE code size: ",/A,$-muls_16_8_24_HLE
+
+;--------------------------------------------------------------------------------------------
+; (int24)HLE = (int16)DE * (int8)A - more compact variant, but slower
+; 30 bytes, 10+8+12+4+10+11+4+4+4+4+4+8+4+8+4+8+4+15+10 = 136T (best case 124T)
+muls_16_8_24_HLE_compact:
+    ld      hl,0    ; adjust result value = 0
+    bit     7,d
+    jr      z,.x_pos
+    ld      h,a     ; adjust value += ($10000*y)>>8 = y<<8
+.x_pos:
+    or      a
+    jp      p,.y_pos
+    add     hl,de   ; adjust value += ($100*x)>>8 = x
+.y_pos:
+    ld      c,l
+    ld      b,h     ; BC = adjust result value, DE = x, A = y
+    ld      h,a
+    ld      l,e     ; HL = y0,x0
+    ld      e,a
+    mul     de      ; x1*y0
+    ex      de,hl   ; HL = x1*y0, DE = y0,x0
+    mul     de      ; y0*x0
+    ld      a,d
+    add     hl,a    ; HLE = unsigned result
+    or      a
+    sbc     hl,bc   ; HLE = signed result (adjusted)
     ret
 
     ENDMODULE
