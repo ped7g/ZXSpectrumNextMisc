@@ -184,11 +184,11 @@ test:
     or      a
     sbc     hl,de
     pop     de
-    jr      nz,.error
+    jp      nz,.error
     inc     e
-    jr      nz,.l6
+    jp      nz,.l6
     inc     d
-    jr      nz,.l6
+    jp      nz,.l6
 
     ; signed mul 16x8_16 tests (testing it against 16x16_16 results), doing some possible inputs (about ~10k of them)
     ld      l,0
@@ -249,6 +249,32 @@ test:
     ld      de,.data_16x8_s.itemSize
     add     ix,de
     djnz    .l8
+
+    ; mul 24x24_24 tests
+    ld      ix,.data_32x32_32_s
+    ld      b,.data_32x32_32_s.count
+.l9:
+    push    bc,,ix
+    ld      e,(ix+0)
+    ld      l,(ix+1)
+    ld      h,(ix+2)            ; HLE (24b arg1) (out of 32b arg in table)
+    ld      d,(ix+4)
+    ld      c,(ix+5)
+    ld      b,(ix+6)            ; BCD (24b arg2) (out of 32b arg in table)
+    call    mul_24_24_24_HLE    ; HLE = HLE * BCD
+    pop     ix,,bc
+    ld      a,(ix+8)
+    sub     e
+    jr      nz,.error
+    ld      a,(ix+9)
+    sub     l
+    jr      nz,.error
+    ld      a,(ix+10)
+    sub     h
+    jr      nz,.error
+    ld      de,.data_32x32_32_s.itemSize
+    add     ix,de
+    djnz    .l9
 
     ret                 ; test finished
 
@@ -450,5 +476,44 @@ test:
     create_cross_signed_data dw, db, d24, $7FEF, $55
     create_cross_signed_data dw, db, d24, $7FEF, $7F
 .data_16x8_s.count:  equ  ($-.data_16x8_s)/.data_16x8_s.itemSize : ASSERT .data_16x8_s.count < 256
+
+.data_32x32_32_s:
+    create_signed_data dd, dd, dd, 0, 0
+.data_32x32_32_s.itemSize: equ $-.data_32x32_32_s
+    create_cross_signed_data dd, dd, dd, $75C6C7C8, $71C2C3C4   ; 0x345658E3:43EE4D20
+    create_cross_signed_data dd, dd, dd, 1, 1
+    create_cross_signed_data dd, dd, dd, $000000BB, $00000077
+    create_cross_signed_data dd, dd, dd, $0000BCBB, $00000077
+    create_cross_signed_data dd, dd, dd, $00BDBCBB, $00000077
+    create_cross_signed_data dd, dd, dd, $3BBDBCBB, $00000077
+    create_cross_signed_data dd, dd, dd, $00000055, $00000077
+    create_cross_signed_data dd, dd, dd, $00005655, $00000077
+    create_cross_signed_data dd, dd, dd, $00575655, $00000077
+    create_cross_signed_data dd, dd, dd, $35575655, $00000077
+    create_cross_signed_data dd, dd, dd, $000000BB, $00007877
+    create_cross_signed_data dd, dd, dd, $0000BCBB, $00007877
+    create_cross_signed_data dd, dd, dd, $00BDBCBB, $00007877
+    create_cross_signed_data dd, dd, dd, $3BBDBCBB, $00007877
+    create_cross_signed_data dd, dd, dd, $00000055, $00007877
+    create_cross_signed_data dd, dd, dd, $00005655, $00007877
+    create_cross_signed_data dd, dd, dd, $00575655, $00007877
+    create_cross_signed_data dd, dd, dd, $35575655, $00007877
+    create_cross_signed_data dd, dd, dd, $000000BB, $00797877
+    create_cross_signed_data dd, dd, dd, $0000BCBB, $00797877
+    create_cross_signed_data dd, dd, dd, $00BDBCBB, $00797877
+    create_cross_signed_data dd, dd, dd, $3BBDBCBB, $00797877
+    create_cross_signed_data dd, dd, dd, $00000055, $00797877
+    create_cross_signed_data dd, dd, dd, $00005655, $00797877
+    create_cross_signed_data dd, dd, dd, $00575655, $00797877
+    create_cross_signed_data dd, dd, dd, $35575655, $00797877
+    create_cross_signed_data dd, dd, dd, $000000BB, $7A797877
+    create_cross_signed_data dd, dd, dd, $0000BCBB, $7A797877
+    create_cross_signed_data dd, dd, dd, $00BDBCBB, $7A797877
+    create_cross_signed_data dd, dd, dd, $3BBDBCBB, $7A797877
+    create_cross_signed_data dd, dd, dd, $00000055, $7A797877
+    create_cross_signed_data dd, dd, dd, $00005655, $7A797877
+    create_cross_signed_data dd, dd, dd, $00575655, $7A797877
+    create_cross_signed_data dd, dd, dd, $35575655, $7A797877
+.data_32x32_32_s.count:  equ  ($-.data_32x32_32_s)/.data_32x32_32_s.itemSize : ASSERT .data_32x32_32_s.count < 256
 
     ENDMODULE

@@ -155,6 +155,67 @@ mul_16_16_32_DELC:
     ret             ; result = DELC
 
 ;--------------------------------------------------------------------------------------------
+; (uint24)HLE = (uint24 HLE)x * (uint24 BCD)y
+; 39 bytes, 182T
+mul_24_24_24_HLE:
+;__  __  __  x2  x1  x0
+;__  __  __  y2  y1  y0 *
+;;;;;;;;;;;;;;;;;;;;;;;
+;r5  r4  r3  r2  r1  r0
+;                 +x0y0
+;             +x1y0
+;         +x2y0                 ; !1 truncated to 8bit
+;             +x0y1
+;         +x1y1                 ; !1
+;;    +x2y1                     ; !2 truncated completely
+;         +x0y2                 ; !1
+;;    +x1y2                     ; !2
+;;+x2y2                         ; !2
+; values preservation: (longest lifecycle) y0[3x] x0[3x] x1[2x] x2[1x] y1[2x] y2[1x] (to discard first)
+; x = HLE, y = BCD -> lifecycle: D E L H C B
+    ;   A   H  L   B  C   D  E  stack IXL
+    ;  **  x2 x1  y2 y1  y0 x0  **     **
+    push    de      ; y0,x0
+    ld      ixl,d   ; preserve y0
+    ld      d,b     ; DE = y2x0, B released
+    ld      b,e     ; preserve x0
+    mul     de      ; x0y2 = +r2
+    ld      a,e
+    ;   A   H  L   B  C   D  E  stack IXL
+    ;  t2  x2 x1  x0 y1  -- --  y0,x0  y0   ; "t2" is partial r2
+    ld      d,b
+    ld      e,c
+    mul     de      ; x0y1 = +r1
+    add     a,d
+    ;   A   H  L   B  C   D  E  stack IXL
+    ;  t2  x2 x1  x0 y1  -- r1a y0,x0  y0
+    ld      d,c     ; C released
+    ld      c,e
+    ld      e,l
+    mul     de      ; x1y1 = +r2
+    add     a,e     ; AC = truncated(x*y1 + (x*y2<<8))
+    ;   A   H  L   B  C   D  E  stack IXL
+    ;  t2  x2 x1  x0 t1  --  -- y0,x0  y0
+    ld      d,h
+    ld      e,ixl
+    ld      h,e
+    mul     de      ; x2y0 = +r2
+    add     a,e
+    ld      d,a     ; x2y0 added to future top byte (currently B)
+    ld      e,c
+    ex      de,hl
+    ;   A   H  L   B  C   D  E  stack IXL
+    ;  --  t2 t1  -- --  y0 x1  y0,x0  --
+    mul     de      ; x1y0 = +r1
+    add     hl,de   ; HL = upper 16 bits of result without x0y0 overflow
+    pop     de
+    mul     de      ; x0y0 = +r0
+    ld      a,d
+    add     hl,a    ; HLE = 24b result
+    ret
+    DISPLAY "mul_24_24_24_HLE code size: ",/A,$-mul_24_24_24_HLE
+
+;--------------------------------------------------------------------------------------------
 ;--------------------------------------------------------------------------------------------
 ;--------------------------------------------------------------------------------------------
 ; signed variants and tips&tricks how to exploit unsigned multiplications for signed values

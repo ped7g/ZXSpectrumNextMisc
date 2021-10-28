@@ -231,6 +231,15 @@ test_start:
     add     de,-$132A
     add     bc,-$F4DF               ; DEBC should end zeroed here
 
+    ; snippet for "multiplication - 24x24 = 24 bits" ; HLE = HLE * BCD
+    ld      hl,$FEDC
+    ld      bc,$0102
+    ld      de,$03BA
+    call    mul.mul_24_24_24_HLE
+    ld      d,0
+    add     de,-$002E
+    add     hl,-$700A               ; HL,DE should end zeroed here
+
     ; snippet for "multiplication - signed 8x8 = 16 bits" ; AE = E * D
     ld      de,$AABA
     call    mul.muls_8_8_16_AE      ; -86 * -70 ($AA * $BA)
@@ -452,6 +461,11 @@ test_muls16x8_24:
 test_muls16x8_24_compact:
     DB  .e-.s, 40, 20
 .s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
+.e:
+
+test_mul24x24_24:
+    DB  .e-.s,  4, 22
+.s: test_txt_hexadr mul.mul_24_24_24_HLE, "MUL 24x24 bits (24b result)"
 .e:
 
 ; test_texts list terminator
