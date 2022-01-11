@@ -778,16 +778,16 @@
 <th>A</th>
 <td axis="-0*0--|2|16|Transfers a byte of data from the memory location pointed to by hl to the memory location pointed to by de. Then hl and de are incremented and bc is decremented.">ldi</td>
 <td axis="-1*+++|2|16|Compares the value of the memory location pointed to by hl with a. Then hl is incremented and bc is decremented.">cpi</td>
-<td axis="-1  * |2|16|A byte from port bc is written to the memory location pointed to by hl. Then hl is incremented and b is decremented.">ini</td>
-<td axis="-1  * |2|16|b is decremented (sets zero flag if zero is reached). Then a byte from the memory location pointed to by hl is written to port bc. Then hl is incremented.">outi</td>
+<td axis=" 1  * |2|16|A byte from port bc is written to the memory location pointed to by hl. Then hl is incremented and b is decremented.">ini</td>
+<td axis=" 1  * |2|16|b is decremented (sets zero flag if zero is reached). Then a byte from the memory location pointed to by hl is written to port bc. Then hl is incremented.">outi</td>
 <td class="nn" axis="------|2|16|If the byte value from the memory at location hl differs from a, writes the byte to the memory location pointed to by de. The hl and de are incremented and bc is decremented.">ldix</td>
 <td class="nn" axis="-0V+++|2|14|Transfers a byte of data from the memory location pointed to by hl to the memory location pointed to by de. Then only l and only d are incremented. Resulting flags are identical to `inc d` instruction.">ldws</td>
 <td></td>
 <td></td>
 <td axis="-0*0--|2|16|Transfers a byte of data from the memory location pointed to by hl to the memory location pointed to by de. Then hl, de, and bc are decremented.">ldd</td>
 <td axis="-1*+++|2|16|Compares the value of the memory location pointed to by hl with a. Then hl and bc are decremented.">cpd</td>
-<td axis="-1  * |2|16|A byte from port bc is written to the memory location pointed to by hl. Then hl and b are decremented.">ind</td>
-<td axis="-1  * |2|16|b is decremented (sets zero flag if zero is reached). Then a byte from the memory location pointed to by hl is written to port bc. Then hl is decremented.">outd</td>
+<td axis=" 1  * |2|16|A byte from port bc is written to the memory location pointed to by hl. Then hl and b are decremented.">ind</td>
+<td axis=" 1  * |2|16|b is decremented (sets zero flag if zero is reached). Then a byte from the memory location pointed to by hl is written to port bc. Then hl is decremented.">outd</td>
 <td class="nn" axis="------|2|16|If the byte value from the memory at location hl differs from a, writes the byte to the memory location pointed to by de. The de is incremented, hl and bc are decremented.">lddx</td>
 <td></td>
 <td></td>
@@ -797,16 +797,16 @@
 <th>B</th>
 <td axis="-000--|2|21/16|Transfers a byte of data from the memory location pointed to by hl to the memory location pointed to by de. Then hl and de are incremented and bc is decremented. If bc is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">ldir</td>
 <td axis="-10+++|2|21/16|Compares the value of the memory location pointed to by hl with a. Then hl is incremented and bc is decremented. If bc is not zero and z is not set, this operation is repeated. Interrupts can trigger while this instruction is processing.">cpir</td>
-<td axis="-1  1 |2|21/16|A byte from port bc is written to the memory location pointed to by hl. Then hl is incremented and b is decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">inir</td>
-<td axis="-1  1 |2|21/16|b is decremented. Then a byte from the memory location pointed to by hl is written to port bc. Then hl is incremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">otir</td>
+<td axis=" 1  1 |2|21/16|A byte from port bc is written to the memory location pointed to by hl. Then hl is incremented and b is decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">inir</td>
+<td axis=" 1  1 |2|21/16|b is decremented. Then a byte from the memory location pointed to by hl is written to port bc. Then hl is incremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">otir</td>
 <td class="nn" axis="------|2|21/16|If the byte value from the memory at location hl differs from a, writes the byte to the memory location pointed to by de. The hl and de are incremented and bc is decremented. If bc is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing. (4-letter: lirx)">ldirx</td>
 <td></td>
 <td></td>
 <td class="nn" axis="------|2|21/16|The source address is calculated as (hl&amp;0xFFF8)+(e&amp;0x07). If the byte value from the memory at source location differs from a, writes the byte to the memory location pointed to by de. The de is incremented and bc is decremented. If bc is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing. (4-letter: lprx)">ldpirx</td>
 <td axis="-000--|2|21/16|Transfers a byte of data from the memory location pointed to by hl to the memory location pointed to by de. Then hl, de, and bc are decremented. If bc is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">lddr</td>
 <td axis="-10+++|2|21/16|Compares the value of the memory location pointed to by hl with a. Then hl and bc are decremented. If bc is not zero and z is not set, this operation is repeated. Interrupts can trigger while this instruction is processing.">cpdr</td>
-<td axis="-1  1 |2|21/16|A byte from port bc is written to the memory location pointed to by hl. Then hl and b are decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">indr</td>
-<td axis="-1  1 |2|21/16|b is decremented. Then a byte from the memory location pointed to by hl is written to port bc. Then hl is decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">otdr</td>
+<td axis=" 1  1 |2|21/16|A byte from port bc is written to the memory location pointed to by hl. Then hl and b are decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">indr</td>
+<td axis=" 1  1 |2|21/16|b is decremented. Then a byte from the memory location pointed to by hl is written to port bc. Then hl is decremented. If b is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing.">otdr</td>
 <td class="nn" axis="------|2|21/16|If the byte value from the memory at location hl differs from a, writes the byte to the memory location pointed to by de. The de is incremented, hl and bc are decremented. If bc is not zero, this operation is repeated. Interrupts can trigger while this instruction is processing. (4-letter: ldrx)">lddrx</td>
 <td></td>
 <td></td>
