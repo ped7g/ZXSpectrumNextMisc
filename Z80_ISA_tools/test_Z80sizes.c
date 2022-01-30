@@ -1,5 +1,5 @@
 // to build and run this test:
-//   cc classicZ80_instructions_size.c test_Z80sizes.c && ./a.out 
+//   cc Z80N_instructions_size.c test_Z80sizes.c && ./a.out
 
 #include <stdint.h>
 #include <stdio.h>

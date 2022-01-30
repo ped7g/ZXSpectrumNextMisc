@@ -2,8 +2,14 @@
 ;;
 ;; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 
+;     DEFINE CLASSIC_Z80  ; uncomment or define from command line to get classic Z80 variant
+;     DEFINE snafile      ; uncomment or define from command line to get .sna test file
+
     ; switch sjasmplus to correct syntax variant
-    OPT reset --zxnext --syntax=abfw
+    OPT reset --syntax=abfw
+    IFNDEF CLASSIC_Z80
+        OPT --zxnext
+    ENDIF
 
     IFNDEF snafile
         ; dot command is raw binary targetting $2000
@@ -192,17 +198,27 @@ expectedSize_regular:
         DB  1, 1, 3, 1, 3, 1, 2, 1, 1, 1, 3, 1, 3, 2, 2, 1  ; Fx
 
 expectedSize_ED_prefix:
-        ;  x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF - ED prefix - Z80N version
+        ;  x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 xA xB xC xD xE xF - ED prefix - Z80 / Z80N version by define CLASSIC_Z80
         DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 0x
         DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 1x
-        DB  2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2  ; 2x
-        DB  2, 2, 2, 2, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 3x
+    IFDEF CLASSIC_Z80
+        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 2x - classic Z80
+        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 3x - classic Z80
+    ELSE
+        DB  2, 2, 2, 2, 2, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2  ; 2x - Z80N extensions
+        DB  2, 2, 2, 2, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 3x - Z80N extensions
+    ENDIF
         DB  2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2  ; 4x
         DB  2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2  ; 5x
         DB  2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2  ; 6x
         DB  2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2  ; 7x
-        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2  ; 8x
-        DB  2, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 9x
+    IFDEF CLASSIC_Z80
+        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 8x - classic Z80
+        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 9x - classic Z80
+    ELSE
+        DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2  ; 8x - Z80N extensions
+        DB  2, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; 9x - Z80N extensions
+    ENDIF
         DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; Ax
         DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; Bx
         DB  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  ; Cx
@@ -234,6 +250,10 @@ sna_start:
         call    start
         jr      $
 
-        SAVESNA "test.sna", sna_start
+        IFDEF CLASSIC_Z80
+            SAVESNA "test_z80.sna", sna_start
+        ELSE
+            SAVESNA "test.sna", sna_start
+        ENDIF
         DISPLAY "code size of GetZ80NOpcodeSize include: ", /D, __GetZ80NOpcodeSize_INCLUDE_END-__GetZ80NOpcodeSize_INCLUDE_START
     ENDIF

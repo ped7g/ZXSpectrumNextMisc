@@ -3,9 +3,15 @@
 ;; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
 ;;
 ;; this is meant to be reasonably fast while also small+simple (size 161 bytes)
+;; use assembly-time define CLASSIC_Z80 to build version for classic Z80 (141 bytes)
+
+;     DEFINE CLASSIC_Z80              ; uncomment or define from command line to get classic Z80 variant
 
     ; switch sjasmplus to correct syntax variant
-    OPT push reset --zxnext --syntax=abfw
+    OPT push reset --syntax=abfw
+    IFNDEF CLASSIC_Z80
+        OPT --zxnext
+    ENDIF
 
 ;; Internal entry point for DD/ED/FD prefixed opcode (do not call yourself)
 ;; use public API `GetZ80NOpcodeSize` instead (documented below)
@@ -67,6 +73,8 @@ GetZ80NOpcodeSize:
         ret
 
 gZ80N.ExtendedInstructions:
+    IFNDEF CLASSIC_Z80
+        ; Z80N variant, checking for specific Z80N instructions (classic Z80 doesn't have these)
         cp      $27
         jr      z,gZ80N.return2     ; Z80N test imm8
         cp      $92
@@ -78,8 +86,9 @@ gZ80N.ExtendedInstructions:
         sub     $34
         cp      $36-$34+1
         jr      c,gZ80N.return3     ; Z80N add r16,imm16 ($34 .. $36)
-        ld      a,$C7
-        and     (hl)
+        ld      a,(hl)
+    ENDIF
+        and     $C7
         cp      $43                 ; $43, $4B, $53, $5B, $63, $6B, $73, $7B
         jr      nz,gZ80N.return1    ; everything else from extended is length 2 (return 1)
     ; ld (**),r16, ld r16,(**)
@@ -126,7 +135,15 @@ gZ80N.Idx7Is0to3:
         rrca
         rrca                        ; A = octet = x0>>3
         ld      de,gZ80N.quartetsPatterns
+    IFDEF CLASSIC_Z80
+        add     a,e
+        ld      e,a
+        adc     a,d
+        sub     e
+        ld      d,a
+    ELSE
         add     de,a
+    ENDIF
         ld      a,(de)              ; A = quartetData = quartetsPatterns[octet]
         pop     de                  ; D = idx7 (0..3)
     ; return two bits of quartetData selected by idx7
