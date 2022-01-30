@@ -3,7 +3,7 @@ SJASMPLUSFLAGS = --msg=war --lstlab --nologo --fullpath
 
 .PHONY: all clean gitrelease
 
-all: test.log test.dot test.sna
+all: test.log test.dot test_z80.dot test.sna test_z80.sna
 
 clean:
 	$(RM) -f tstZ80sz test.log test.dot test.dot.lst test_z80.dot test_z80.dot.lst test.sna test.sna.lst test_z80.sna test_z80.sna.lst
