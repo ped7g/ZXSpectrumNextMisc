@@ -205,7 +205,7 @@ ScrollVertical:
     ; modify the C_WAIT instruction to C_WAIT(line=(256 - y_scroll), h=38)
         nextreg $61,CopperCodeTemplate.modifyWait - CopperCodeTemplate      ; COPPER_CONTROL_LO_NR_61
         ; WAIT(line=(256 - y_scroll), h=38)
-        ld      hl,($8000 | (38<<9)) + 256
+        ld      hl,($8000 | (39<<9)) + 256
         sub     hl,de       ; fake instruction (or a : sbc hl,de)
         ld      a,h
         nextreg $63,a       ; using 16b copper write here for whole WAIT    ; COPPER_DATA_16B_NR_63
