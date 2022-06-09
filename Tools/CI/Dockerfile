@@ -10,9 +10,10 @@ FROM gcc:6
 
 # clone sources of sjasmplus (from my fork repository, where I put also "RC" tags),
 # build sjasmplus and install it as part of this container
-RUN git clone --depth=1 --shallow-submodules --branch v1.20.0-rc1 --recurse-submodules -j6 https://github.com/ped7g/sjasmplus.git \
+RUN git clone --depth=1 --branch v1.20.0-rc1 -j4 https://github.com/ped7g/sjasmplus.git \
     && cd sjasmplus \
+    && git submodule update --init --depth=1 -j4 \
     && make clean \
-    && make -j6 \
+    && make -j4 \
     && make install \
     && make clean
