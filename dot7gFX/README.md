@@ -9,10 +9,10 @@ then later based on feedback and interest level maybe more effects will be added
 
 ### what it does and how to use it
 
-Fades out selected palette &lt;pal&gt; until all is black, in 7 steps.
+Fades out selected palette `<pal>` until all is black, in 7 steps.
 
-The speed of the fade can be adjusted by &lt;delay&gt; option, default delay
-is 6 frames per step, that is 6 \* 7 = 42 frames in total, ~0.84s at 50Hz.
+The speed of the fade can be adjusted by `<delay>` option, default delay
+is 6 frames per step, that is 6 * 7 = 42 frames in total, ~0.84s at 50Hz.
 
 The faded palette is being uploaded at scanline 224 (below 320x256 area with
 nextreg $64 (100) set to zero).
@@ -35,7 +35,7 @@ to black color, it's up to caller to modify it further.
 
 #### EXAMPLES
 
-fade second ULA palette in 21 frames (delay \* 7): `../7GFX_FO.DOT u1 3`
+fade second ULA palette in 21 frames (delay * 7): `../7GFX_FO.DOT u1 3`
 
 fade first Layer2 palette with default delay 6: `../7GFX_FO.DOT l`
 
@@ -56,7 +56,7 @@ mirrored and priority bit cleared, forming nice 16bit value
 `%rrrg'ggbb'b000'0000` with 9 bit color value in top bits.
 
 Then in loop the working buffer is darkened and uploaded to nextreg $44 in
-seven steps, waiting &lt;delay&gt; frames between each step.
+seven steps, waiting `<delay>` frames between each step.
 
 The priority bit of Layer2 colors is left unmodified (also true for extra bits
 in palettes for other layers, which in current cores 3.1.x don't matter, but
@@ -77,14 +77,14 @@ original Red/Green/Blue channel value against bitmask if it is non-zero" and
 
 step | bitmask | tR | tG | tB | R | G | B
  :-: |   :--:  | :-:| :-:| :-:|:-:|:-:|:-:
-0 | init | - | - | - | 7 | 5 | 1
-1 | 4 | y | y | n | 6 | 4 | 1
-2 | 2 | y | n | n | 5 | 4 | 1
-3 | 4 | y | y | n | 4 | 3 | 1
-4 | 1 | y | y | y | 3 | 2 | 0
-5 | 4 | y | y | n | 2 | 1 | 0
-6 | 2 | y | n | n | 1 | 1 | 0
-7 | 4 | y | y | n | 0 | 0 | 0
+  0  |   init  |  - |  - |  - | 7 | 5 | 1
+  1  |    4    |  y |  y |  n | 6 | 4 | 1
+  2  |    2    |  y |  n |  n | 5 | 4 | 1
+  3  |    4    |  y |  y |  n | 4 | 3 | 1
+  4  |    1    |  y |  y |  y | 3 | 2 | 0
+  5  |    4    |  y |  y |  n | 2 | 1 | 0
+  6  |    2    |  y |  n |  n | 1 | 1 | 0
+  7  |    4    |  y |  y |  n | 0 | 0 | 0
 
 As you can see, the channel values are fading out linearly, with Blue becoming
 0 in the middle of the loop, not after first step.
