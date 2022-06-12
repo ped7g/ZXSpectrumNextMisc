@@ -9,6 +9,7 @@
 ; TODO:
 ; - add optional input handling to skip delay (keyboard, joysticks, CLI option)
 ; - add option to preserve particular color (transparency by index, not by value, sry)
+; - add multi-layer option (and maybe any-order arguments support)
 ;
 
         OPT reset --zxnext --syntax=abf
