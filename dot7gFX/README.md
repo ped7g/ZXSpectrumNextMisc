@@ -1,6 +1,9 @@
 # dot7gFX
 
-Should become set of "FX" (effects) dot-files for NextBASIC users.
+Home url: https://github.com/ped7g/ZXSpectrumNextMisc/tree/master/dot7gFX
+(check for latest updates, source code, build instructions, etc)
+
+"dot7gFX" should become set of "FX" (effects) dot-files for NextBASIC users.
 
 ATM the plan is to produce only one "fade out" effect for Matt's DotJam event,
 then later based on feedback and interest level maybe more effects will be added.
@@ -35,9 +38,9 @@ to black color, it's up to caller to modify it further.
 
 #### EXAMPLES
 
-fade second ULA palette in 21 frames (delay * 7): `../7GFX_FO.DOT u1 3`
+fade second ULA palette in 21 frames (delay * 7): `../7GFX_FO.DOT U1 3`
 
-fade first Layer2 palette with default delay 6: `../7GFX_FO.DOT l`
+fade first Layer2 palette with default delay 6: `../7GFX_FO.DOT L`
 
 ### how to build it
 
