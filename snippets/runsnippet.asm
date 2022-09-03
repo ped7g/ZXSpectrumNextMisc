@@ -139,12 +139,14 @@ test_start:
 
     ; snippet for "HL mod 320"
     ld      hl,1234         ; expected result for 1234: HL = 274 ($0112)
-    call    mod320.hlMod320
+    call    mod320.hlMod320_v2
     ld      hl,2345         ; expected result for 2345: HL = 105 ($0069)
     call    mod320.hlMod320_unrolled
     ld      de,3456         ; expected result for 3456: DE = 256 ($0100)
     call    mod320.deMod320_lut
-    ; rigorous tests doing full HL=0..65535
+    ld      hl,4567         ; expected result for 4567: A = 14 ($0E), DE = 87 ($0057)
+    call    mod320.hlDivMod320
+    ; rigorous tests doing full HL=0..65535 (only for one function from above, uncomment desired one)
     IFDEF _INCLUDE_MOD_320_TESTS_ : call mod320.test : ENDIF
 
     ; snippet for "HL mod 192"
@@ -392,7 +394,7 @@ test_div10C:
 
 test_mod320:
     DB  .e-.s, 40, 11
-.s: test_txt_hexadr mod320.hlMod320, "a) HL modulo 320"
+.s: test_txt_hexadr mod320.hlMod320, "a) HL modulo 320 (v2)"
 .e:
 
 test_mod320_unrolled:
@@ -405,18 +407,23 @@ test_mod320_lut:
 .s: test_txt_hexadr mod320.deMod320_lut, "c) DE modulo 320 with LUT"
 .e:
 
-test_mod192:
+test_divmod320:
     DB  .e-.s, 40, 14
+.s: test_txt_hexadr mod320.hlDivMod320, "HL DIVMOD 320"
+.e:
+
+test_mod192:
+    DB  .e-.s, 40, 15
 .s: test_txt_hexadr mod192.hlMod192, "a) HL modulo 192"
 .e:
 
 test_mod192_lut:
-    DB  .e-.s, 40, 15
+    DB  .e-.s, 40, 16
 .s: test_txt_hexadr mod192.hlMod192_lut, "b) HL modulo 192 with LUT"
 .e:
 
 test_mod192_lut_B:
-    DB  .e-.s, 40, 16
+    DB  .e-.s, 40, 17
 .s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
 .e:
 
@@ -461,22 +468,22 @@ test_mul16x16_32:
 .e:
 
 test_muls8x8_16:
-    DB  .e-.s, 40, 17
+    DB  .e-.s, 40, 18
 .s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
 .e:
 
 test_muls16x8_16:
-    DB  .e-.s, 40, 18
+    DB  .e-.s, 40, 19
 .s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
 .e:
 
 test_muls16x8_24:
-    DB  .e-.s, 40, 19
+    DB  .e-.s, 40, 20
 .s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
 .e:
 
 test_muls16x8_24_compact:
-    DB  .e-.s, 40, 20
+    DB  .e-.s, 40, 21
 .s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
 .e:
 

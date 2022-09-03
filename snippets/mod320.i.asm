@@ -1,6 +1,7 @@
     MODULE mod320
 
 ;--------------------------------------------------------------------------------------------
+;;;;;;;;;;;;;; OBSOLETED by v2 below, unless you are looking for shortest one ;;;;;;;;;;;;;;;
 ; Calculates HL = HL % 320, for uin16_t values (0..65535)
 ; modifies: DE, BC, F
 ; code length: 18 bytes, about 500T total duration (for SUB_POWER 6)
@@ -21,6 +22,64 @@ hlMod320:
     bsrf    de,b                    ;  8T ; bsra needs d.7=1 => max power 6, bsrf fills => max power 7
     ; Z80 alternative: sra d : rr e (16T)
     jp      .loop                   ; 10T
+
+;--------------------------------------------------------------------------------------------
+; Calculates HL = HL % 320, for uin16_t values (0..65535)
+; modifies: DE, B, F
+; code length: 26 bytes, about 450T total duration
+; (for [incomplete] int16_t input you can do `add hl,32640` to get -32640..+32767 as 0..65407)
+
+hlMod320_v2:
+    ld      b,7
+    ld      de,-320<<6              ; -320<<7 overflows int16_t and makes the loop fail for large inputs
+    ; but with only -320<<6 as starting point, the large values need two extra subtractions
+    add     hl,de
+    jr      nc,.not_included
+    add     hl,de
+    jr      nc,.not_included
+.loop:
+    add     hl,de                   ; check if the particular -320<<n is included in the input value
+    jr      c,.was_included
+.not_included:
+    sbc     hl,de                   ; restore HL
+.was_included:
+    add     hl,hl                   ; shift input value to left in every loop (instead of shifting -320<<n down)
+    djnz    .loop
+    ; HL = result_9b << 7; shift it back to return it in HL
+    ex      de,hl
+    ld      b,7
+    bsrl    de,b
+    ex      de,hl
+    ret
+
+;--------------------------------------------------------------------------------------------
+; Calculates A = HL / 320, DE = HL % 320, for uin16_t values (0..65535)
+; modifies: HL, B, F
+; code length: 30 bytes, about 500T total duration
+
+hlDivMod320:
+    ld      a,high(320<<7)-1        ; handle values >= 320<<7 outside of loop (.loop works correctly only for -320<<6 and less)
+    cp      h
+    jr      nc,.no_power7
+    add     hl,-320<<7              ; HL -= 320<<7
+.no_power7:
+    rla                             ; initial bit of div result
+    ld      b,7
+    ld      de,-320<<6
+.loop:
+    add     hl,de                   ; check if the particular -320<<n is included in the input value
+    jr      c,.was_included
+.not_include:
+    sbc     hl,de                   ; restore HL
+.was_included:
+    rla                             ; TODO: use `adc hl,hl` to store bottom 7 bits of div result? (but it's hassle to extract elegantly)
+    add     hl,hl                   ; shift input value to left in every loop (instead of shifting -320<<n down)
+    djnz    .loop
+    ; HL = result_9b << 7; shift it back to return it in HL, A = HL DIV 320
+    ex      de,hl
+    ld      b,7
+    bsrl    de,b                    ; DE = HL % 320
+    ret
 
 ;--------------------------------------------------------------------------------------------
 ; for smaller HL values it may be worth to unroll the routine, like for HL=0..2048

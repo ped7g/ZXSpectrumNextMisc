@@ -9,6 +9,11 @@ test:
 
     ;call    hlMod320
 
+    ;call    hlMod320_v2
+
+    ;call    hlDivMod320
+    ;ex      de,hl
+
     ;call    hlMod320_unrolled
 
     ex      de,hl       ; LUT variant takes input in DE and returns result in DE
