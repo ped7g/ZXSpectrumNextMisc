@@ -6,8 +6,8 @@
 ; code length: 18 bytes, about 500T total duration (for SUB_POWER 6)
 ; (for [incomplete] int16_t input you can do `add hl,32640` to get -32640..+32767 as 0..65407)
 
-SUB_POWER   EQU     6       ; 6 is max, makes the loop to start with -64*320
-                            ; you can use lower number if you know your max HL will be lower
+SUB_POWER   EQU     6       ; 7 is max with `bsrf`, 6 is slightly faster in full 64ki range test
+                            ; you can use lower number if you know your usual HL will be lower
 
 hlMod320:
     ld      de,-320<<SUB_POWER      ; 10T
@@ -18,7 +18,7 @@ hlMod320:
     sbc     hl,de                   ; 15T
     dec     c                       ;  4T
     ret     z                       ;  5T / 11T
-    bsra    de,b                    ;  8T
+    bsrf    de,b                    ;  8T ; bsra needs d.7=1 => max power 6, bsrf fills => max power 7
     ; Z80 alternative: sra d : rr e (16T)
     jp      .loop                   ; 10T
 
