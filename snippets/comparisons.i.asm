@@ -26,10 +26,16 @@ comparisons:
     ld      e,$80
     ret
 .less:
+    ld      e,$FE
+    ret
+.lessEqual:
     ld      e,$FF
     ret
 .greaterEqual:
     ld      e,$01
+    ret
+.greater:
+    ld      e,$02
     ret
 .negative:
     ld      e,$2D               ; '-'
@@ -80,6 +86,18 @@ comparisons:
     ; less/greater+equal (below/above in x86 terminology)
     call    c,.less             ; HL < BC
     call    nc,.greaterEqual    ; HL >= BC
+    ret
+
+;; example: uint16 HL <= / > uint16 BC (does not preserve HL)
+;; - specific case for initial `scf`: changes "<,>=" pair to "<=,>" pair
+.uint16_HLgreater:
+    ; comparison code
+    scf                         ; set carry flag for SBC
+    sbc     hl,bc               ; destructive to content of HL
+    ; HL restore would require `add hl,bc : inc hl`
+    ; less+equal/greater (below/above in x86 terminology)
+    call    c,.lessEqual        ; HL <= BC
+    call    nc,.greater         ; HL > BC
     ret
 
 ;; example: int16 HL vs int16 BC
@@ -173,6 +191,10 @@ comparisons:
     ld      hl,1234             ; first value "HL"
     ld      bc,5678             ; second value "BC"
     call    .uint16
+    ld      e,$EE               ; no result
+    ld      hl,1234             ; first value "HL"
+    ld      bc,1234             ; second value "BC"
+    call    .uint16_HLgreater
     ld      e,$EE               ; no result
     ld      hl,2345             ; first value "HL"
     ld      bc,6789             ; second value "BC"
