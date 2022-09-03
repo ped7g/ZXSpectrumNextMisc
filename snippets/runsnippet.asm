@@ -7,13 +7,14 @@
 ; runsnippet.asm: including all snippets into one file, shows addresses for debugging
 ;  purposes and after keypress it runs some of the snippets
 
-    DEFINE _INCLUDE_COMPARISONS_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_DIV_10_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_MOD_320_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_MOD_192_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_MOD_40_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_BIT_FUN_TESTS_ ; addd rigorous tests: error turns screen red
-    DEFINE _INCLUDE_MUL_TESTS_ ; addd partial tests: error turns screen red
+    DEFINE _INCLUDE_COMPARISONS_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_DIV_10_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_320_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_192_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_40_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_BIT_FUN_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MUL_TESTS_ ; add partial tests: error turns screen red
+    DEFINE _INCLUDE_DIV_50_TESTS_ ; add partial tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -39,6 +40,8 @@
     IFDEF _INCLUDE_BIT_FUN_TESTS_ : INCLUDE "bit_fun.test.i.asm" : ENDIF
     INCLUDE "mul.i.asm"
     IFDEF _INCLUDE_MUL_TESTS_ : INCLUDE "mul.test.i.asm" : ENDIF
+    INCLUDE "div50.i.asm"
+    IFDEF _INCLUDE_DIV_50_TESTS_ : INCLUDE "div50.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -268,6 +271,20 @@ test_start:
     ; partial tests multiplying some hand-picked values
     IFDEF _INCLUDE_MUL_TESTS_ : call mul.test : ENDIF
 
+    ; snippet for "DE div 50" variations
+    ; variant "A", 30 bytes, 130T, returns result as 8.8 fixed point in DE
+    ld      de,12345                ; 48.22265625 in 8.8 fixed point, expecting result 0.964453125 (246 in fp8.8)
+    call    div50.div50_fp88_v2
+    ; variant "B", 17 bytes, 72T, slightly less accurate result
+    ld      de,12345
+    call    div50.div50_fp88_v3
+    ; variant "C", 25 bytes, 92..103T, signed divide DE/50, result is signed fixed point 8.8 value
+    ld      de,-12345
+    call    div50.divs50_fp88
+
+    ; partial tests doing some values for all three variants
+    IFDEF _INCLUDE_DIV_50_TESTS_ : call div50.test : ENDIF
+
     ;; refresh screen and snippets texts and wait again for key
     jp      .refresh_screen
 
@@ -466,6 +483,21 @@ test_muls16x8_24_compact:
 test_mul24x24_24:
     DB  .e-.s,  4, 22
 .s: test_txt_hexadr mul.mul_24_24_24_HLE, "MUL 24x24 bits (24b result)"
+.e:
+
+test_div50_v2:
+    DB  .e-.s,  4, 23
+.s: test_txt_hexadr div50.div50_fp88_v2, "a) DE DIV 50: 30B (FixPt 8.8)"
+.e:
+
+test_div50_v3:
+    DB  .e-.s,  4, 24
+.s: test_txt_hexadr div50.div50_fp88_v3, "b) DE DIV 50: 17B (FixPt 3.5)"
+.e:
+
+test_divs50:
+    DB  .e-.s,  4, 25
+.s: test_txt_hexadr div50.divs50_fp88, "c) DE SDIV 50: 25B (signed)"
 .e:
 
 ; test_texts list terminator
