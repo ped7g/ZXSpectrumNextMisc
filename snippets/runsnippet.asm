@@ -365,25 +365,17 @@ test_t3:
 .s: DB  "Code snippets:"
 .e:
 
+; left half of screen:
+
 test_findVLinesCount:
     DB  .e-.s,  4,  9
 .s: test_txt_hexadr findVLinesCount, "findVLinesCount [$"
 .v: DB  "????]"
 .e:
 
-test_Comparison:
-    DB  .e-.s, 40,  9
-.s: test_txt_hexadr comparisons.run, "Comparison examples"
-.e:
-
 test_5bDecode:
     DB  .e-.s,  4, 10
 .s: test_txt_hexadr str5b.decode, "19B 5b-packed-string decode"
-.e:
-
-test_detectZ80N:
-    DB  .e-.s, 40, 10
-.s: test_txt_hexadr detectZ80N, "Detect Z80N CPU"
 .e:
 
 test_div10A:
@@ -399,46 +391,6 @@ test_div10B:
 test_div10C:
     DB  .e-.s,  4, 13
 .s: test_txt_hexadr div10.eDiv10C, "c) E-Div-10: 7B (0..127)"
-.e:
-
-test_mod320:
-    DB  .e-.s, 40, 11
-.s: test_txt_hexadr mod320.hlMod320, "a) HL modulo 320 (v2)"
-.e:
-
-test_mod320_unrolled:
-    DB  .e-.s, 40, 12
-.s: test_txt_hexadr mod320.hlMod320_unrolled, "b) HL modulo 320 unrolled"
-.e:
-
-test_mod320_lut:
-    DB  .e-.s, 40, 13
-.s: test_txt_hexadr mod320.deMod320_lut, "c) DE modulo 320 with LUT"
-.e:
-
-test_divmod320:
-    DB  .e-.s, 40, 14
-.s: test_txt_hexadr mod320.hlDivMod320, "HL DIVMOD 320"
-.e:
-
-test_mod192:
-    DB  .e-.s, 40, 15
-.s: test_txt_hexadr mod192.hlMod192, "a) HL modulo 192"
-.e:
-
-test_mod192_lut:
-    DB  .e-.s, 40, 16
-.s: test_txt_hexadr mod192.hlMod192_lut, "b) HL modulo 192 with LUT"
-.e:
-
-test_mod192_lut_B:
-    DB  .e-.s, 40, 17
-.s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
-.e:
-
-test_mod640_lut:
-    DB  .e-.s, 40, 18
-.s: test_txt_hexadr mod640.hlMod640_lut, "HL modulo 640 with LUT"
 .e:
 
 test_mod40:
@@ -481,26 +433,6 @@ test_mul16x16_32:
 .s: test_txt_hexadr mul.mul_16_16_32_DELC, "MUL 16x16 bits (32b result)"
 .e:
 
-test_muls8x8_16:
-    DB  .e-.s, 40, 19
-.s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
-.e:
-
-test_muls16x8_16:
-    DB  .e-.s, 40, 20
-.s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
-.e:
-
-test_muls16x8_24:
-    DB  .e-.s, 40, 21
-.s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
-.e:
-
-test_muls16x8_24_compact:
-    DB  .e-.s, 40, 22
-.s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
-.e:
-
 test_mul24x24_24:
     DB  .e-.s,  4, 22
 .s: test_txt_hexadr mul.mul_24_24_24_HLE, "MUL 24x24 bits (24b result)"
@@ -519,6 +451,78 @@ test_div50_v3:
 test_divs50:
     DB  .e-.s,  4, 25
 .s: test_txt_hexadr div50.divs50_fp88, "c) DE SDIV 50: 25B (signed)"
+.e:
+
+; right half of screen:
+
+test_Comparison:
+    DB  .e-.s, 40,  9
+.s: test_txt_hexadr comparisons.run, "Comparison examples"
+.e:
+
+test_detectZ80N:
+    DB  .e-.s, 40, 10
+.s: test_txt_hexadr detectZ80N, "Detect Z80N CPU"
+.e:
+
+test_mod320:
+    DB  .e-.s, 40, 11
+.s: test_txt_hexadr mod320.hlMod320, "a) HL modulo 320 (v2)"
+.e:
+
+test_mod320_unrolled:
+    DB  .e-.s, 40, 12
+.s: test_txt_hexadr mod320.hlMod320_unrolled, "b) HL modulo 320 unrolled"
+.e:
+
+test_mod320_lut:
+    DB  .e-.s, 40, 13
+.s: test_txt_hexadr mod320.deMod320_lut, "c) DE modulo 320 with LUT"
+.e:
+
+test_divmod320:
+    DB  .e-.s, 40, 14
+.s: test_txt_hexadr mod320.hlDivMod320, "HL DIVMOD 320"
+.e:
+
+test_mod192:
+    DB  .e-.s, 40, 15
+.s: test_txt_hexadr mod192.hlMod192, "a) HL modulo 192"
+.e:
+
+test_mod192_lut:
+    DB  .e-.s, 40, 16
+.s: test_txt_hexadr mod192.hlMod192_lut, "b) HL modulo 192 with LUT"
+.e:
+
+test_mod192_lut_B:
+    DB  .e-.s, 40, 17
+.s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
+.e:
+
+test_mod640_lut:
+    DB  .e-.s, 40, 18
+.s: test_txt_hexadr mod640.hlMod640_lut, "HL modulo 640 with LUT"
+.e:
+
+test_muls8x8_16:
+    DB  .e-.s, 40, 19
+.s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
+.e:
+
+test_muls16x8_16:
+    DB  .e-.s, 40, 20
+.s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
+.e:
+
+test_muls16x8_24:
+    DB  .e-.s, 40, 21
+.s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
+.e:
+
+test_muls16x8_24_compact:
+    DB  .e-.s, 40, 22
+.s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
 .e:
 
 ; test_texts list terminator
