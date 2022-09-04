@@ -7,8 +7,10 @@ test:
     push    hl
     push    de
 
-    call    hlMod640_lut
-    ex      de,hl       ; result is in DE
+;     call    hlMod640_lut
+;     ex      de,hl       ; result is in DE
+
+    call    hlMod640
 
     pop     de          ; compare result with preserved DE
     or      a

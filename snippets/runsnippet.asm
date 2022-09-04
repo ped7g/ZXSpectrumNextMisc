@@ -155,7 +155,9 @@ test_start:
     ; snippet for "HL mod 640"
     ld      hl,$FFC1        ; expected result for $FFC1: DE = 193 ($00C1)
     call    mod640.hlMod640_lut
-    ; rigorous tests doing full HL=0..65535
+    ld      hl,34559        ; expected result for 34559: HL = 639 ($027F)
+    call    mod640.hlMod640
+    ; rigorous tests doing full HL=0..65535 (only for one function from above, uncomment desired one)
     IFDEF _INCLUDE_MOD_640_TESTS_ : call mod640.test : ENDIF
 
     ; snippet for "HL mod 192"
@@ -502,26 +504,31 @@ test_mod192_lut_B:
 
 test_mod640_lut:
     DB  .e-.s, 40, 18
-.s: test_txt_hexadr mod640.hlMod640_lut, "HL modulo 640 with LUT"
+.s: test_txt_hexadr mod640.hlMod640_lut, "a) HL modulo 640 with LUT"
+.e:
+
+test_mod640:
+    DB  .e-.s, 40, 19
+.s: test_txt_hexadr mod640.hlMod640, "b) HL modulo 640"
 .e:
 
 test_muls8x8_16:
-    DB  .e-.s, 40, 19
+    DB  .e-.s, 40, 20
 .s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
 .e:
 
 test_muls16x8_16:
-    DB  .e-.s, 40, 20
+    DB  .e-.s, 40, 21
 .s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
 .e:
 
 test_muls16x8_24:
-    DB  .e-.s, 40, 21
+    DB  .e-.s, 40, 22
 .s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
 .e:
 
 test_muls16x8_24_compact:
-    DB  .e-.s, 40, 22
+    DB  .e-.s, 40, 23
 .s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
 .e:
 
