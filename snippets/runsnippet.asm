@@ -10,6 +10,7 @@
     DEFINE _INCLUDE_COMPARISONS_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_DIV_10_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_320_TESTS_ ; add rigorous tests: error turns screen red
+    DEFINE _INCLUDE_MOD_640_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_192_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_MOD_40_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_BIT_FUN_TESTS_ ; add rigorous tests: error turns screen red
@@ -31,7 +32,9 @@
     INCLUDE "div10.i.asm"
     IFDEF _INCLUDE_DIV_10_TESTS_ : INCLUDE "div10.test.i.asm" : ENDIF
     INCLUDE "mod320.i.asm"
+    INCLUDE "mod640.i.asm"  ; included right after mod320 to not waste bytes by table aligning
     IFDEF _INCLUDE_MOD_320_TESTS_ : INCLUDE "mod320.test.i.asm" : ENDIF
+    IFDEF _INCLUDE_MOD_640_TESTS_ : INCLUDE "mod640.test.i.asm" : ENDIF
     INCLUDE "mod192.i.asm"
     IFDEF _INCLUDE_MOD_192_TESTS_ : INCLUDE "mod192.test.i.asm" : ENDIF
     INCLUDE "mod40.i.asm"
@@ -148,6 +151,12 @@ test_start:
     call    mod320.hlDivMod320
     ; rigorous tests doing full HL=0..65535 (only for one function from above, uncomment desired one)
     IFDEF _INCLUDE_MOD_320_TESTS_ : call mod320.test : ENDIF
+
+    ; snippet for "HL mod 640"
+    ld      hl,$FFC1        ; expected result for $FFC1: DE = 193 ($00C1)
+    call    mod640.hlMod640_lut
+    ; rigorous tests doing full HL=0..65535
+    IFDEF _INCLUDE_MOD_640_TESTS_ : call mod640.test : ENDIF
 
     ; snippet for "HL mod 192"
     ld      hl,1234         ; expected result for 1234: HL = 82 ($0052)
@@ -427,6 +436,11 @@ test_mod192_lut_B:
 .s: test_txt_hexadr mod192.hlMod192_lut_B, "c) HL modulo 192 LUT => A"
 .e:
 
+test_mod640_lut:
+    DB  .e-.s, 40, 18
+.s: test_txt_hexadr mod640.hlMod640_lut, "HL modulo 640 with LUT"
+.e:
+
 test_mod40:
     DB  .e-.s,  4, 14
 .s: test_txt_hexadr mod40.hlMod40, "HL modulo 40"
@@ -468,22 +482,22 @@ test_mul16x16_32:
 .e:
 
 test_muls8x8_16:
-    DB  .e-.s, 40, 18
+    DB  .e-.s, 40, 19
 .s: test_txt_hexadr mul.muls_8_8_16_AE, "SMUL 8x8=16 bits, \"S\" as signed"
 .e:
 
 test_muls16x8_16:
-    DB  .e-.s, 40, 19
+    DB  .e-.s, 40, 20
 .s: test_txt_hexadr mul.muls_16_8_16_AL, "SMUL 16x8=16 bits"
 .e:
 
 test_muls16x8_24:
-    DB  .e-.s, 40, 20
+    DB  .e-.s, 40, 21
 .s: test_txt_hexadr mul.muls_16_8_24_HLE, "a) SMUL 16x8=24 bits, 52B"
 .e:
 
 test_muls16x8_24_compact:
-    DB  .e-.s, 40, 21
+    DB  .e-.s, 40, 22
 .s: test_txt_hexadr mul.muls_16_8_24_HLE_compact, "b) SMUL 16x8=24 bits, 30B slower"
 .e:
 
