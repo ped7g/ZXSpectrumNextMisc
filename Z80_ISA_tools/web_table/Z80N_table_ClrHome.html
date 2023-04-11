@@ -199,7 +199,9 @@
 
         $('td:not(:has(\'a\')):not(:first-child)').mouseover(function(e) {
           var desc = '';
-          var val = $(this).attr('axis').split('|');
+          var axis = $(this).attr('axis');
+          if (!axis) return;
+          var val = axis.split('|');
           var flags = ['C', 'N', 'P/V', 'H', 'Z', 'S'];
 
           for (i = 0; i < 6; i++) {
