@@ -352,7 +352,7 @@
 <td axis="------|2|10|Loads * into (hl).">ld (hl),*</td>
 <td axis="10-0--|1|4|Sets the carry flag.">scf</td>
 <td axis="------|2|12/7|If condition cc is true, the signed value * is added to pc. The jump is measured from the start of the instruction opcode.">jr c,*</td>
-<td axis="++-+--|1|11|The value of hl is added to hl.">add hl,sp</td>
+<td axis="++-+--|1|11|The value of sp is added to hl.">add hl,sp</td>
 <td axis="------|3|13|Loads the value pointed to by ** into a.">ld a,(**)</td>
 <td axis="------|1|6|Subtracts one from sp.">dec sp</td>
 <td axis="-0V+++|1|4|Adds one to a.">inc a</td>
@@ -723,7 +723,7 @@
 <th>7</th>
 <td class="un" axis="-0P0++|2|12|Inputs a byte from port bc and affects flags only.">in (c)</td>
 <td class="un" axis="------|2|12|Outputs a zero (or 0xFF with some Z80 chips) to port bc.">out (c),0</td>
-<td axis="++V+++|2|15|Subtracts hl and the carry flag from hl.">sbc hl,sp</td>
+<td axis="++V+++|2|15|Subtracts sp and the carry flag from hl.">sbc hl,sp</td>
 <td axis="------|4|20|Stores sp into the memory location pointed to by **.">ld (**),sp</td>
 <td class="un" axis="++V+++|2|8|The contents of a are negated (two's complement). Operation is the same as subtracting a from zero.">neg</td>
 <td axis="------|2|14|Used at the end of a non-maskable interrupt service routine (located at $0066) to pop the top stack entry into PC. The value of IFF2 is copied to IFF1 so that maskable interrupts are allowed to continue as before. NMIs are not enabled on the TI.">retn</td>
@@ -731,7 +731,7 @@
 <td></td>
 <td axis="-0P0++|2|12|A byte from port bc is written to a.">in a,(c)</td>
 <td axis="------|2|12|The value of a is written to port bc.">out (c),a</td>
-<td axis="++V+++|2|15|Adds hl and the carry flag to hl.">adc hl,sp</td>
+<td axis="++V+++|2|15|Adds sp and the carry flag to hl.">adc hl,sp</td>
 <td axis="------|4|20|Loads the value pointed to by ** into sp.">ld sp,(**)</td>
 <td class="un" axis="++V+++|2|8|The contents of a are negated (two's complement). Operation is the same as subtracting a from zero.">neg</td>
 <td axis="------|2|14|Used at the end of a non-maskable interrupt service routine (located at $0066) to pop the top stack entry into PC. The value of IFF2 is copied to IFF1 so that maskable interrupts are allowed to continue as before. NMIs are not enabled on the TI.">retn</td>
