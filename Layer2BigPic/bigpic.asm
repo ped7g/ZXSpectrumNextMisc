@@ -202,9 +202,9 @@ ScrollVertical:
         nextreg $61,CopperCodeTemplate.modifyYpos - CopperCodeTemplate      ; COPPER_CONTROL_LO_NR_61
         ld      a,e
         nextreg $60,a       ; result: "C_MOVE $17, scrollYpos & 0xFF"       ; COPPER_DATA_NR_60
-    ; modify the C_WAIT instruction to C_WAIT(line=(256 - y_scroll), h=38)
+    ; modify the C_WAIT instruction to C_WAIT(line=(256 - y_scroll), h=39)
         nextreg $61,CopperCodeTemplate.modifyWait - CopperCodeTemplate      ; COPPER_CONTROL_LO_NR_61
-        ; WAIT(line=(256 - y_scroll), h=38)
+        ; WAIT(line=(256 - y_scroll), h=39)
         ld      hl,($8000 | (39<<9)) + 256
         sub     hl,de       ; fake instruction (or a : sbc hl,de)
         ld      a,h
@@ -230,7 +230,7 @@ CopperCodeTemplate:
         C_MOVE  $17, 0      ; the value is modified to (ypos&0xFF), $17 is Layer2 Yoffset   ; LAYER2_YOFFSET_NR_17
         C_MOVE  $12, $$l2buf_top/2      ; $12 is first bank of visible Layer2 (top image)   ; LAYER2_RAM_BANK_NR_12
 .modifyWait:
-        C_WAIT  0, 0        ; this is modified to C_WAIT(line=(256-ypos), h=38)
+        C_WAIT  0, 0        ; this is modified to C_WAIT(line=(256-ypos), h=39)
         C_MOVE  $12, $$l2buf_bot/2      ; set bank to bottom image                          ; LAYER2_RAM_BANK_NR_12
         C_HALT
 .end:
