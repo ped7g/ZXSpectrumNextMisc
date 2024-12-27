@@ -10,8 +10,8 @@
     ; setup Next device and sjasmplus syntax to my liking
         DEVICE ZXSPECTRUMNEXT : OPT reset --zxnext=cspect --syntax=abfw
 
-    ; put this example binary from $8000 during load (and mostly during execution too)
-        ORG $8000
+    ; load example binary into 16ki_bank 15 at $C000 (used also mostly during execution)
+        MMU $C000 $E000, 30, $C000      ; bank 15 to make example work as savenex/nexload test too
 workBuffer:     DS      256     ; aligned buffer for temporary stuff (like displayedge)
 im2Ivt:         DS      257, 1 + high im2Ivt
         ORG     ($FF00 & $) + 1 + high im2Ivt
@@ -615,7 +615,7 @@ font_src.SZ: EQU $-font_src
 stack:
 
     ; save the NEX file
-        SAVENEX OPEN "test8xN.nex", start, stack, 0, 2
+        SAVENEX OPEN "test8xN.nex", start, stack, $$start>>1, 2
         SAVENEX CORE 3,1,5 : SAVENEX CFG 0
         SAVENEX AUTO : SAVENEX CLOSE
         CSPECTMAP "test8xN.map"
