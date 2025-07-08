@@ -1,5 +1,6 @@
 ; ZX Spectrum Next - assembly snippets, requires ZX Spectrum Next with core3.1.5+
 ; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
+; (dual licensed code, alternative license: https://unlicense.org/ )
 ;
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.18.2+)
 ; The Makefile has the full-rebuild instructions
