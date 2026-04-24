@@ -236,7 +236,7 @@ bankRangeB = -1     ; reset range
                 IF 5 == bankI : DEFINE+ BANK_INFO " ($4000..$7FFF)",BANK_PC_INFO,BANK_SP_INFO," (WARNING: kills NextZXOS sysvars)" : ENDIF
                 IF 2 == bankI : DEFINE+ BANK_INFO " ($8000..$BFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
                 IF {b head.ENTRYBANK} == bankI : DEFINE+ BANK_INFO " ($C000..$FFFF)",BANK_PC_INFO,BANK_SP_INFO : ENDIF
-                DISPLAY "+ bank ",/D,bankI,BANK_INFO
+                DISPLAY "+ bank ",/D,bankI,BANK_INFO        ; emptystr-ok
             ENDIF
         ELSEIF -1 == bankRangeB     ; regular bank starting new range
 bankRangeB = bankI
