@@ -1,5 +1,5 @@
 ; ZX Spectrum Next - assembly snippets, requires ZX Spectrum Next with core3.1.5+
-; © Peter Helcmanovsky 2020, license: https://opensource.org/licenses/MIT
+; © Peter Helcmanovsky 2020-2026, license: https://opensource.org/licenses/MIT
 ; (dual licensed code, alternative license: https://unlicense.org/ )
 ;
 ; Assembles with sjasmplus - https://github.com/z00m128/sjasmplus (v1.18.2+)
@@ -17,6 +17,7 @@
     DEFINE _INCLUDE_BIT_FUN_TESTS_ ; add rigorous tests: error turns screen red
     DEFINE _INCLUDE_MUL_TESTS_ ; add partial tests: error turns screen red
     DEFINE _INCLUDE_DIV_50_TESTS_ ; add partial tests: error turns screen red
+    DEFINE _INCLUDE_PERCENT_COMP_TESTS_ ; add partial tests: error turns screen red
 
     OPT reset --zxnext --syntax=abfw
     DEVICE ZXSPECTRUMNEXT
@@ -46,6 +47,8 @@
     IFDEF _INCLUDE_MUL_TESTS_ : INCLUDE "mul.test.i.asm" : ENDIF
     INCLUDE "div50.i.asm"
     IFDEF _INCLUDE_DIV_50_TESTS_ : INCLUDE "div50.test.i.asm" : ENDIF
+    INCLUDE "percentCompleted.i.asm"
+    IFDEF _INCLUDE_PERCENT_COMP_TESTS_ : INCLUDE "percentCompleted.test.i.asm" : ENDIF
 
     ASSERT $ <= $C000
 
@@ -299,6 +302,14 @@ test_start:
     ; partial tests doing some values for all three variants
     IFDEF _INCLUDE_DIV_50_TESTS_ : call div50.test : ENDIF
 
+    ; snipped for "percentage as DE of HL"
+    ld      de,1000
+    ld      hl,4000
+    call    percentCompleted.calc
+
+    ; partial tests for some hand-picked values
+    IFDEF _INCLUDE_PERCENT_COMP_TESTS_ : call percentCompleted.test : ENDIF
+
     ;; refresh screen and snippets texts and wait again for key
     jp      .refresh_screen
 
@@ -454,6 +465,11 @@ test_div50_v3:
 test_divs50:
     DB  .e-.s,  4, 25
 .s: test_txt_hexadr div50.divs50_fp88, "c) DE SDIV 50: 25B (signed)"
+.e:
+
+test_percent_completed:
+    DB  .e-.s,  4, 26
+.s: test_txt_hexadr percentCompleted.calc, "percentage as DE of HL"
 .e:
 
 ; right half of screen:
