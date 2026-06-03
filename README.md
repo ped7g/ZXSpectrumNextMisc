@@ -1,5 +1,5 @@
 # ZXSpectrumNextMisc
-[![Build Status](https://api.cirrus-ci.com/github/ped7g/ZXSpectrumNextMisc.svg)](https://cirrus-ci.com/github/ped7g/ZXSpectrumNextMisc/master)
+[![build](https://github.com/ped7g/ZXSpectrumNextMisc/actions/workflows/main.yml/badge.svg)](https://github.com/ped7g/ZXSpectrumNextMisc/actions/workflows/main.yml)
 [![GitHub repo size in bytes](https://img.shields.io/github/repo-size/ped7g/ZXSpectrumNextMisc.svg)](https://github.com/ped7g/ZXSpectrumNextMisc/)
 [![MIT License](https://img.shields.io/github/license/ped7g/ZXSpectrumNextMisc.svg)](https://github.com/ped7g/ZXSpectrumNextMisc/blob/master/LICENSE)
 

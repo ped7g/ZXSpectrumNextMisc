@@ -1,0 +1,55 @@
+name: build
+  # this name becomes visible on the badge in readme, so keeping it simple "build" intentionally
+
+# List of GH runners and their details:
+#   repo: https://github.com/actions/runner-images#available-images
+#   docs: https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # git release tag of desired sjasmplus version
+  SJASMPLUS_VERSION: v1.23.0
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege for GITHUB_TOKEN.
+permissions:
+  contents: read
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: install Image magick (if not available)
+        run: convert --version || (sudo apt-get -qq update && sudo apt-get -qq install imagemagick)
+      - name: SW versions
+        run: |
+          echo "nproc: $(nproc)" && set -x
+          bash --version
+          git --version
+          gcc --version
+          make --version
+          convert --version
+      - name: build sjasmplus assembler
+        run: |
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          git clone --jobs=$(nproc) --depth=1 --single-branch --branch "$SJASMPLUS_VERSION" \
+            https://github.com/ped7g/sjasmplus.git "$tmpdir/sjasmplus"
+          git -C "$tmpdir/sjasmplus" submodule update --init --depth=1 --jobs "$(nproc)"
+          make -C "$tmpdir/sjasmplus" -j$(nproc)
+          sudo make -C "$tmpdir/sjasmplus" install
+      - name: check installed sjasmplus version
+        run: |
+          set -x
+          sjasmplus --version
+      - name: make all sub-projects
+        run: make clean && make all
