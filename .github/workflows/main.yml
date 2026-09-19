@@ -12,7 +12,7 @@ on:
 
 env:
   # git release tag of desired sjasmplus version
-  SJASMPLUS_VERSION: v1.23.0
+  SJASMPLUS_VERSION: v1.24.0
 
 # Cancel superseded runs on the same ref.
 concurrency:
